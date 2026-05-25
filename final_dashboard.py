@@ -1,30 +1,38 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+import plotly.graph_objects as go
 
 st.set_page_config(page_title="Stock Dashboard", layout="wide")
-st.title("📊 ระบบวิเคราะห์หุ้นส่วนตัว")
 
-ticker = st.sidebar.text_input("ใส่ชื่อหุ้น:", value="AAPL")
+# ปรับ CSS ให้ดูสะอาดขึ้นนิดหน่อย
+st.markdown("""
+    <style>
+    .main { background-color: #f5f5f5; }
+    </style>
+    """, unsafe_allow_html=True)
+
+st.title("📊 ระบบวิเคราะห์หุ้นส่วนตัว (Premium Look)")
+
+ticker = st.sidebar.text_input("ใส่ชื่อหุ้น (เช่น AAPL, PTT.BK):", value="AAPL")
 
 @st.cache_data
 def get_data(ticker):
-    # ปรับปรุงให้ดึงข้อมูลได้แม่นยำขึ้น
     df = yf.download(ticker, period="1y", interval="1d", auto_adjust=True)
     return df
 
 if ticker:
     df = get_data(ticker)
     
-    # ตรวจสอบว่า df ไม่ว่างและมีข้อมูลราคา
     if not df.empty and 'Close' in df.columns:
-        # ใช้ .iloc[:, 0] กรณีที่มีหลาย column ซ้อนกัน
         close_price = df['Close']
-        if isinstance(close_price, pd.DataFrame):
-            close_price = close_price.iloc[:, 0]
-            
-        st.subheader(f"ราคาหุ้นของ {ticker}")
-        st.line_chart(close_price)
+        if isinstance(close_price, pd.DataFrame): close_price = close_price.iloc[:, 0]
+        
+        # ใช้ Plotly แทน line_chart ธรรมดา
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=df.index, y=close_price, mode='lines', name='ราคาปิด', line=dict(color='#008080', width=2)))
+        fig.update_layout(title=f"กราฟราคา {ticker}", template="plotly_white", height=400)
+        st.plotly_chart(fig, use_container_width=True)
 
         # คำนวณ RSI
         delta = close_price.diff()
@@ -35,7 +43,13 @@ if ticker:
         rs = avg_gain / avg_loss
         rsi = 100 - (100 / (1 + rs))
 
-        st.subheader("ดัชนี RSI (14 วัน)")
-        st.line_chart(rsi)
+        # แสดงกราฟ RSI แบบสวยๆ ด้วย Plotly
+        fig_rsi = go.Figure()
+        fig_rsi.add_trace(go.Scatter(x=df.index, y=rsi, mode='lines', name='RSI', line=dict(color='#FF4500')))
+        fig_rsi.add_hline(y=70, line_dash="dash", line_color="red")
+        fig_rsi.add_hline(y=30, line_dash="dash", line_color="green")
+        fig_rsi.update_layout(title="ดัชนี RSI (14 วัน)", template="plotly_white", height=300)
+        st.plotly_chart(fig_rsi, use_container_width=True)
+        
     else:
-        st.error(f"ไม่พบข้อมูลหุ้น {ticker} กรุณาตรวจสอบชื่อ Ticker อีกครั้ง")
+        st.warning("ไม่พบข้อมูลหุ้นตัวนี้ครับ")
