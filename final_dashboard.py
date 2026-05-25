@@ -9,7 +9,7 @@ st.set_page_config(page_title="Stock Dashboard", layout="wide")
 st.title("📊 ระบบวิเคราะห์หุ้นส่วนตัว")
 
 # เลือกหุ้น
-ticker = st.sidebar.selectbox("เลือกหุ้น:", ["AAPL", "NVDA", "TSLA", "MSFT", "GOOGL"])
+ticker = st.sidebar.text_input("ใส่ชื่อหุ้น (เช่น AAPL, TSLA, OR.BK):", value="AAPL")
 
 # ดึงข้อมูล
 df = yf.download(ticker, period="1y", interval="1d", progress=False)
