@@ -5,77 +5,66 @@ import plotly.graph_objects as go
 
 st.set_page_config(page_title="Stock Dashboard", layout="wide")
 
-st.title("📊 ระบบวิเคราะห์หุ้นส่วนตัว")
+# CSS สำหรับ Dark Mode ถาวร
+st.markdown("""
+    <style>
+    .stApp { background-color: #121212; }
+    h1, h2, h3, div, p { color: #e0e0e0 !important; }
+    section[data-testid="stSidebar"] { background-color: #1e1e1e; }
+    </style>
+    """, unsafe_allow_html=True)
+
+st.title("📊 ระบบวิเคราะห์หุ้นส่วนตัว (Advanced & Dark)")
 
 # Sidebar
-st.sidebar.header("การตั้งค่า")
 ticker = st.sidebar.text_input("วิเคราะห์รายตัว:", value="AAPL")
-tickers = st.sidebar.multiselect("เปรียบเทียบหุ้น:", ["AAPL", "NVDA", "TSLA", "MSFT", "PTT.BK"], default=["AAPL", "NVDA"])
 
 @st.cache_data
 def get_data(ticker):
     df = yf.download(ticker, period="1y", interval="1d", auto_adjust=True)
     if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
+    # เพิ่มเส้น EMA 200 วัน
+    df['EMA200'] = df['Close'].ewm(span=200, adjust=False).mean()
     return df
 
-# 1. ส่วนเปรียบเทียบ
-if tickers:
-    st.subheader("กราฟเปรียบเทียบผลตอบแทน (%)")
-    df_multi = yf.download(tickers, period="1y", interval="1d", auto_adjust=True)['Close']
-    norm_df = (df_multi / df_multi.iloc[0] - 1) * 100
-    st.line_chart(norm_df)
-
-st.divider()
-
-# 2. วิเคราะห์เจาะลึก
 if ticker:
     df = get_data(ticker)
-    if not df.empty and 'Close' in df.columns:
-        st.subheader(f"วิเคราะห์เชิงลึก: {ticker}")
-        
-        # กราฟราคา
+    if not df.empty:
+        # กราฟราคา + เส้น EMA 200 (ตัวกรองความแม่นยำ)
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=df.index, y=df['Close'], name='ราคาปิด', line=dict(color='#008080')))
-        fig.update_layout(title=f"กราฟราคา {ticker}", template="plotly_white", height=400)
+        fig.add_trace(go.Scatter(x=df.index, y=df['Close'], name='ราคาปิด'))
+        fig.add_trace(go.Scatter(x=df.index, y=df['EMA200'], name='EMA 200', line=dict(color='yellow', dash='dot')))
+        fig.update_layout(title=f"กราฟราคา {ticker} & EMA 200", template="plotly_dark", height=400)
         st.plotly_chart(fig, use_container_width=True)
 
-        # คำนวณ RSI & MACD
+        # สูตร RSI แบบ Wilder's (แม่นยำขึ้น)
         delta = df['Close'].diff()
-        rsi = 100 - (100 / (1 + (delta.where(delta > 0, 0).rolling(14).mean() / (-delta.where(delta < 0, 0).rolling(14).mean()))))
+        gain = delta.clip(lower=0)
+        loss = -delta.clip(upper=0)
+        avg_gain = gain.ewm(com=13, adjust=False).mean()
+        avg_loss = loss.ewm(com=13, adjust=False).mean()
+        rsi = 100 - (100 / (1 + (avg_gain / avg_loss)))
+        
+        # MACD
         exp1, exp2 = df['Close'].ewm(span=12, adjust=False).mean(), df['Close'].ewm(span=26, adjust=False).mean()
         macd, signal = exp1 - exp2, (exp1 - exp2).ewm(span=9, adjust=False).mean()
 
         c1, c2 = st.columns(2)
         with c1:
-            st.subheader("RSI")
             fig_rsi = go.Figure()
             fig_rsi.add_trace(go.Scatter(x=df.index, y=rsi, line=dict(color='#FF4500')))
-            fig_rsi.add_hline(y=70, line_dash="dash", line_color="red")
-            fig_rsi.add_hline(y=30, line_dash="dash", line_color="green")
-            fig_rsi.update_layout(template="plotly_white", height=250)
+            fig_rsi.update_layout(title="RSI (Wilder's Smoothing)", template="plotly_dark", height=250)
             st.plotly_chart(fig_rsi, use_container_width=True)
         with c2:
-            st.subheader("MACD")
             fig_macd = go.Figure()
-            fig_macd.add_trace(go.Scatter(x=df.index, y=macd, name='MACD', line=dict(color='blue')))
+            fig_macd.add_trace(go.Scatter(x=df.index, y=macd, name='MACD', line=dict(color='cyan')))
             fig_macd.add_trace(go.Scatter(x=df.index, y=signal, name='Signal', line=dict(color='orange')))
-            fig_macd.update_layout(template="plotly_white", height=250)
+            fig_macd.update_layout(title="MACD", template="plotly_dark", height=250)
             st.plotly_chart(fig_macd, use_container_width=True)
-            
-        # ตาราง Quick Stats พร้อมสถานะ Overbought/Oversold
-        st.subheader(f"สรุปสถานะล่าสุดของ {ticker}")
-        latest_price = df['Close'].iloc[-1]
-        prev_price = df['Close'].iloc[-2]
-        change_pct = ((latest_price - prev_price) / prev_price) * 100
+
+        # สรุปผล
         latest_rsi = rsi.iloc[-1]
-        
-        col1, col2, col3 = st.columns(3)
-        col1.metric("ราคาล่าสุด", f"${latest_price:.2f}", f"{change_pct:.2f}%")
-        col2.metric("ค่า RSI", f"{latest_rsi:.2f}")
-        
-        if latest_rsi > 70:
-            col3.info("สถานะ: Overbought (ระวัง!)")
-        elif latest_rsi < 30:
-            col3.success("สถานะ: Oversold (น่าสนใจ)")
-        else:
-            col3.write("สถานะ: ปกติ")
+        st.subheader(f"สถานะล่าสุด: {ticker}")
+        if latest_rsi > 70: st.info("สถานะ: Overbought (ระวัง!)")
+        elif latest_rsi < 30: st.success("สถานะ: Oversold (น่าสนใจ)")
+        else: st.write("สถานะ: ปกติ")
