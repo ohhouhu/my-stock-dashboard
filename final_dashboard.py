@@ -558,6 +558,150 @@ if symbol:
         st.plotly_chart(fig_rsi, use_container_width=True)
 
     # =====================================================
+    # LOWER PANELS
+    # =====================================================
+    left, right = st.columns(2)
+
+    with left:
+
+        # Volume
+        st.subheader("📊 Volume")
+
+        volume_colors = [
+            'red' if close < open_ else 'green'
+            for close, open_ in zip(df['Close'], df['Open'])
+        ]
+
+        fig_vol = go.Figure()
+
+        fig_vol.add_trace(
+            go.Bar(
+                x=df.index,
+                y=df['Volume'],
+                marker_color=volume_colors,
+                name='Volume'
+            )
+        )
+
+        fig_vol.add_trace(
+            go.Scatter(
+                x=df.index,
+                y=df['VOL_MA20'],
+                name='Vol MA20'
+            )
+        )
+
+        if show_volume:
+            spike_df = df[df['HIGH_VOLUME'] == True]
+
+            fig_vol.add_trace(
+                go.Scatter(
+                    x=spike_df.index,
+                    y=spike_df['Volume'],
+                    mode='markers',
+                    marker=dict(size=10),
+                    name='Volume Spike'
+                )
+            )
+
+        fig_vol.update_layout(
+            template='plotly_white',
+            height=300
+        )
+
+        st.plotly_chart(fig_vol, use_container_width=True)
+
+        # MACD
+        st.subheader("📈 MACD")
+
+        hist_colors = []
+
+        for i in range(len(df)):
+
+            if i == 0:
+                hist_colors.append('gray')
+                continue
+
+            current = df['MACD_Hist'].iloc[i]
+            prev_hist = df['MACD_Hist'].iloc[i - 1]
+
+            if current >= 0:
+                if current > prev_hist:
+                    hist_colors.append('darkgreen')
+                else:
+                    hist_colors.append('lightgreen')
+            else:
+                if current < prev_hist:
+                    hist_colors.append('darkred')
+                else:
+                    hist_colors.append('salmon')
+
+        fig_macd = go.Figure()
+
+        fig_macd.add_trace(
+            go.Bar(
+                x=df.index,
+                y=df['MACD_Hist'],
+                marker_color=hist_colors,
+                name='Histogram'
+            )
+        )
+
+        fig_macd.add_trace(
+            go.Scatter(
+                x=df.index,
+                y=df['MACD'],
+                name='MACD'
+            )
+        )
+
+        fig_macd.add_trace(
+            go.Scatter(
+                x=df.index,
+                y=df['Signal'],
+                name='Signal'
+            )
+        )
+
+        fig_macd.update_layout(
+            template='plotly_white',
+            height=300
+        )
+
+        st.plotly_chart(fig_macd, use_container_width=True)
+
+    with right:
+
+        # RSI
+        st.subheader("📈 RSI")
+
+        fig_rsi = go.Figure()
+
+        fig_rsi.add_hrect(y0=70, y1=100, opacity=0.1)
+        fig_rsi.add_hrect(y0=0, y1=30, opacity=0.1)
+
+        fig_rsi.add_trace(
+            go.Scatter(
+                x=df.index,
+                y=df['RSI'],
+                name='RSI',
+                line=dict(width=2)
+            )
+        )
+
+        fig_rsi.add_hline(y=70, line_dash='dash')
+        fig_rsi.add_hline(y=30, line_dash='dash')
+        fig_rsi.add_hline(y=50, line_dash='dot')
+
+        fig_rsi.update_layout(
+            template='plotly_white',
+            height=620,
+            yaxis=dict(range=[0, 100])
+        )
+
+        st.plotly_chart(fig_rsi, use_container_width=True)
+
+    # =====================================================
     # AI TRADE SETUP ENGINE
     # =====================================================
     st.divider()
