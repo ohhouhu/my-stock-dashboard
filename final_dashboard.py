@@ -101,7 +101,7 @@ if ticker:
             fig_rsi.add_trace(go.Scatter(x=df.index, y=rsi, line=dict(color='#FF4500')))
             fig_rsi.add_hline(y=70, line_dash="dash", line_color="red")
             fig_rsi.add_hline(y=30, line_dash="dash", line_color="green")
-            fig_rsi.update_layout(template="plotly_white", height=250)
+            ffig_rsi.update_layout(template="plotly_dark", height=250) 
             st.plotly_chart(fig_rsi, use_container_width=True)
         
         with c2:
@@ -109,7 +109,7 @@ if ticker:
             fig_macd = go.Figure()
             fig_macd.add_trace(go.Scatter(x=df.index, y=macd, name='MACD', line=dict(color='blue')))
             fig_macd.add_trace(go.Scatter(x=df.index, y=signal, name='Signal', line=dict(color='orange')))
-            fig_macd.update_layout(template="plotly_white", height=250)
+            fig_macd.update_layout(template="plotly_dark", height=250) 
             st.plotly_chart(fig_macd, use_container_width=True)
         
         # ตาราง Quick Stats
