@@ -50,6 +50,8 @@ if ticker:
             st.subheader("RSI")
             fig_rsi = go.Figure()
             fig_rsi.add_trace(go.Scatter(x=df.index, y=rsi, line=dict(color='#FF4500')))
+            fig_rsi.add_hline(y=70, line_dash="dash", line_color="red")
+            fig_rsi.add_hline(y=30, line_dash="dash", line_color="green")
             fig_rsi.update_layout(template="plotly_white", height=250)
             st.plotly_chart(fig_rsi, use_container_width=True)
         with c2:
@@ -59,27 +61,21 @@ if ticker:
             fig_macd.add_trace(go.Scatter(x=df.index, y=signal, name='Signal', line=dict(color='orange')))
             fig_macd.update_layout(template="plotly_white", height=250)
             st.plotly_chart(fig_macd, use_container_width=True)
-
+            
         # ตาราง Quick Stats พร้อมสถานะ Overbought/Oversold
         st.subheader(f"สรุปสถานะล่าสุดของ {ticker}")
-        
         latest_price = df['Close'].iloc[-1]
         prev_price = df['Close'].iloc[-2]
         change_pct = ((latest_price - prev_price) / prev_price) * 100
         latest_rsi = rsi.iloc[-1]
         
-        # แบ่งเป็น 3 ช่อง (ราคา, RSI, สถานะ)
         col1, col2, col3 = st.columns(3)
-        
         col1.metric("ราคาล่าสุด", f"${latest_price:.2f}", f"{change_pct:.2f}%")
         col2.metric("ค่า RSI", f"{latest_rsi:.2f}")
         
-        # ตัวที่หายไป: Logic เช็คสถานะ RSI
         if latest_rsi > 70:
             col3.info("สถานะ: Overbought (ระวัง!)")
         elif latest_rsi < 30:
             col3.success("สถานะ: Oversold (น่าสนใจ)")
         else:
             col3.write("สถานะ: ปกติ")
-            
-   
