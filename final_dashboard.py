@@ -5,16 +5,15 @@ import plotly.graph_objects as go
 
 st.set_page_config(page_title="Stock Dashboard", layout="wide")
 
-# CSS สำหรับ Dark Mode ถาวร
+# พื้นหลังสีขาวสะอาดตา
 st.markdown("""
     <style>
-    .stApp { background-color: #121212; }
-    h1, h2, h3, div, p { color: #e0e0e0 !important; }
-    section[data-testid="stSidebar"] { background-color: #1e1e1e; }
+    .stApp { background-color: #ffffff; }
+    h1, h2, h3, div, p { color: #000000 !important; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("📊 ระบบวิเคราะห์หุ้นส่วนตัว (Advanced & Dark)")
+st.title("📊 ระบบวิเคราะห์หุ้นส่วนตัว (Standard & Clean)")
 
 # Sidebar
 ticker = st.sidebar.text_input("วิเคราะห์รายตัว:", value="AAPL")
@@ -30,11 +29,11 @@ def get_data(ticker):
 if ticker:
     df = get_data(ticker)
     if not df.empty:
-        # กราฟราคา + เส้น EMA 200 (ตัวกรองความแม่นยำ)
+        # กราฟราคา + เส้น EMA 200
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=df.index, y=df['Close'], name='ราคาปิด'))
-        fig.add_trace(go.Scatter(x=df.index, y=df['EMA200'], name='EMA 200', line=dict(color='yellow', dash='dot')))
-        fig.update_layout(title=f"กราฟราคา {ticker} & EMA 200", template="plotly_dark", height=400)
+        fig.add_trace(go.Scatter(x=df.index, y=df['Close'], name='ราคาปิด', line=dict(color='#008080')))
+        fig.add_trace(go.Scatter(x=df.index, y=df['EMA200'], name='EMA 200', line=dict(color='orange', dash='dot')))
+        fig.update_layout(title=f"กราฟราคา {ticker} & EMA 200", template="plotly_white", height=400)
         st.plotly_chart(fig, use_container_width=True)
 
         # สูตร RSI แบบ Wilder's (แม่นยำขึ้น)
@@ -43,7 +42,8 @@ if ticker:
         loss = -delta.clip(upper=0)
         avg_gain = gain.ewm(com=13, adjust=False).mean()
         avg_loss = loss.ewm(com=13, adjust=False).mean()
-        rsi = 100 - (100 / (1 + (avg_gain / avg_loss)))
+        rs = avg_gain / avg_loss
+        rsi = 100 - (100 / (1 + rs))
         
         # MACD
         exp1, exp2 = df['Close'].ewm(span=12, adjust=False).mean(), df['Close'].ewm(span=26, adjust=False).mean()
@@ -51,15 +51,17 @@ if ticker:
 
         c1, c2 = st.columns(2)
         with c1:
+            st.subheader("RSI (Wilder's Smoothing)")
             fig_rsi = go.Figure()
             fig_rsi.add_trace(go.Scatter(x=df.index, y=rsi, line=dict(color='#FF4500')))
-            fig_rsi.update_layout(title="RSI (Wilder's Smoothing)", template="plotly_dark", height=250)
+            fig_rsi.update_layout(template="plotly_white", height=250)
             st.plotly_chart(fig_rsi, use_container_width=True)
         with c2:
+            st.subheader("MACD")
             fig_macd = go.Figure()
-            fig_macd.add_trace(go.Scatter(x=df.index, y=macd, name='MACD', line=dict(color='cyan')))
-            fig_macd.add_trace(go.Scatter(x=df.index, y=signal, name='Signal', line=dict(color='orange')))
-            fig_macd.update_layout(title="MACD", template="plotly_dark", height=250)
+            fig_macd.add_trace(go.Scatter(x=df.index, y=macd, name='MACD', line=dict(color='blue')))
+            fig_macd.add_trace(go.Scatter(x=df.index, y=signal, name='Signal', line=dict(color='red')))
+            fig_macd.update_layout(template="plotly_white", height=250)
             st.plotly_chart(fig_macd, use_container_width=True)
 
         # สรุปผล
