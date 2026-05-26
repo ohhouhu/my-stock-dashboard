@@ -51,14 +51,11 @@ if ticker:
         fig_rsi.update_layout(title="ดัชนี RSI (14 วัน)", template="plotly_white", height=300)
         st.plotly_chart(fig_rsi, use_container_width=True)
        
-       # เพิ่มหัวข้อให้ MACD
+        # เพิ่มการคำนวณ MACD
         st.subheader(f"กราฟ MACD ของ {ticker}")
-        
-        # กราฟ MACD (ที่พี่ใช้อยู่)
-        fig_macd = go.Figure()
-        fig_macd.add_trace(go.Scatter(x=df.index, y=df['MACD'], name='MACD', line=dict(color='blue')))
-        fig_macd.add_trace(go.Scatter(x=df.index, y=df['Signal_Line'], name='Signal', line=dict(color='orange')))
-        fig_macd.update_layout(title="MACD & Signal Line", template="plotly_white", height=300)
-        st.plotly_chart(fig_macd, use_container_width=True)
+        exp1 = df['Close'].ewm(span=12, adjust=False).mean() # EMA 12 วัน
+        exp2 = df['Close'].ewm(span=26, adjust=False).mean() # EMA 26 วัน
+        df['MACD'] = exp1 - exp2
+        df['Signal_Line'] = df['MACD'].ewm(span=9, adjust=False).mean() # เส้นสัญญาณ
     else:
         st.warning("ไม่พบข้อมูลหุ้นตัวนี้ครับ")
