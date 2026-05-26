@@ -119,42 +119,68 @@ if page == "📊 วิเคราะห์หุ้นเดี่ยว":
         st.dataframe(df_fund, use_container_width=True, height=400)
 
 # ===================== PAGE 2: เปรียบเทียบหลายหุ้น =====================
+# ===================== PAGE 2: เปรียบเทียบหลายหุ้น =====================
 elif page == "🔄 เปรียบเทียบหลายหุ้น":
     st.title("🔄 เปรียบเทียบหลายหุ้น")
     
     tickers_input = st.text_input("กรอกสัญลักษณ์หุ้น (คั่นด้วย comma)", 
                                  value="AAPL, TSLA, NVDA, PTT.BK").strip().upper()
-    tickers = [t.strip() for t in tickers_input.split(",")]
+    tickers = [t.strip() for t in tickers_input.split(",") if t.strip()]
     
     period_options = ["1 เดือน", "3 เดือน", "6 เดือน", "1 ปี", "2 ปี"]
     selected_period = st.selectbox("เลือกช่วงเวลา", period_options, index=3)
     period_map = {"1 เดือน": "1mo", "3 เดือน": "3mo", "6 เดือน": "6mo", "1 ปี": "1y", "2 ปี": "2y"}
 
-    if st.button("🔍 เปรียบเทียบ"):
-        with st.spinner("กำลังดึงข้อมูล..."):
-            data = {}
+    if st.button("🔍 เปรียบเทียบ", type="primary"):
+        if len(tickers) < 2:
+            st.warning("กรุณากรอกหุ้นอย่างน้อย 2 ตัว")
+            st.stop()
+            
+        with st.spinner("กำลังดึงข้อมูลหุ้น..."):
+            closes = {}
             for t in tickers:
                 try:
-                    df = yf.download(t, period=period_map[selected_period], progress=False)
+                    df = yf.download(t, period=period_map[selected_period], 
+                                   interval="1d", progress=False, auto_adjust=True)
                     if not df.empty:
-                        data[t] = df['Close']
-                except:
-                    st.warning(f"ไม่พบ {t}")
+                        closes[t] = df['Close']
+                except Exception as e:
+                    st.warning(f"ไม่สามารถดึงข้อมูล {t} ได้")
 
-            if data:
-                df_compare = pd.DataFrame(data)
-                
-                # Normalized Performance
-                df_norm = df_compare / df_compare.iloc[0] * 100
-                
-                st.subheader("📈 กราฟเปรียบเทียบราคา (Normalized)")
-                fig = go.Figure()
-                for col in df_norm.columns:
-                    fig.add_trace(go.Scatter(x=df_norm.index, y=df_norm[col], name=col))
-                fig.update_layout(height=600, template="plotly_white", hovermode="x unified")
-                st.plotly_chart(fig, use_container_width=True)
-                
-                st.subheader("📊 ตารางเปรียบเทียบ")
-                st.dataframe(df_compare.tail(10), use_container_width=True)
-            else:
-                st.error("ไม่พบข้อมูลหุ้นใดๆ")
+            if len(closes) == 0:
+                st.error("ไม่พบข้อมูลหุ้นใดเลย กรุณาลองใหม่อีกครั้ง")
+                st.stop()
+
+            # ===================== สร้าง DataFrame อย่างปลอดภัย =====================
+            df_compare = pd.concat(closes, axis=1)  # วิธีที่ดีที่สุด
+            df_compare = df_compare.dropna(how='all')  # ลบแถวที่ว่างทั้งหมด
+
+            st.success(f"เปรียบเทียบสำเร็จ: {len(closes)} หุ้น")
+
+            # กราฟ Normalized (เริ่มต้นที่ 100)
+            st.subheader("📈 กราฟเปรียบเทียบราคา (Normalized)")
+            df_norm = df_compare / df_compare.iloc[0] * 100
+            
+            fig = go.Figure()
+            for col in df_norm.columns:
+                fig.add_trace(go.Scatter(x=df_norm.index, y=df_norm[col], name=col, mode='lines'))
+            
+            fig.update_layout(
+                height=600, 
+                template="plotly_white", 
+                hovermode="x unified",
+                legend=dict(orientation="h", y=1.1)
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+            # ตารางราคาปิดล่าสุด
+            st.subheader("📊 ราคาปิดล่าสุดและการเปลี่ยนแปลง")
+            latest = df_compare.iloc[-1]
+            change = df_compare.pct_change().iloc[-1] * 100
+            
+            summary = pd.DataFrame({
+                "ราคาล่าสุด": latest,
+                "เปลี่ยนแปลง (%)": change.round(2)
+            })
+            st.dataframe(summary.style.format({"ราคาล่าสุด": "{:.2f}", "เปลี่ยนแปลง (%)": "{:+.2f}"}), 
+                        use_container_width=True)
