@@ -1,818 +1,185 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-# =====================================================
-# PAGE CONFIG
-# =====================================================
-st.set_page_config(
-    page_title="AI Stock Dashboard",
-    page_icon="📈",
-    layout="wide"
-)
+st.set_page_config(page_title="Stock Dashboard", layout="wide", page_icon="📈")
 
-st.title("📊 AI Stock Dashboard")
-st.caption("Advanced Trend • Momentum • Volume • Market Structure Engine")
+st.title("📊 ระบบวิเคราะห์หุ้นส่วนตัว")
 
-# =====================================================
-# SIDEBAR
-# =====================================================
-st.sidebar.header("⚙️ ตั้งค่าระบบ")
+# ===================== SIDEBAR =====================
+st.sidebar.header("⚙️ การตั้งค่า")
+ticker = st.sidebar.text_input("กรอกสัญลักษณ์หุ้น:", value="AAPL").strip().upper()
 
-symbol = st.sidebar.text_input(
-    "Ticker",
-    value="AAPL"
-).upper().strip()
+period_options = ["1 เดือน", "3 เดือน", "6 เดือน", "1 ปี", "2 ปี", "5 ปี", "10 ปี"]
+selected_period = st.sidebar.selectbox("เลือกช่วงเวลา", period_options, index=3)
+
+interval = st.sidebar.selectbox("ช่วงข้อมูล", ["1d", "1h"], index=0)
 
 period_map = {
-    "1 เดือน": "1mo",
-    "3 เดือน": "3mo",
-    "6 เดือน": "6mo",
-    "1 ปี": "1y",
-    "2 ปี": "2y",
-    "5 ปี": "5y"
+    "1 เดือน": "1mo", "3 เดือน": "3mo", "6 เดือน": "6mo",
+    "1 ปี": "1y", "2 ปี": "2y", "5 ปี": "5y", "10 ปี": "10y"
 }
 
-selected_period = st.sidebar.selectbox(
-    "ช่วงเวลา",
-    list(period_map.keys()),
-    index=3
-)
-
-interval = st.sidebar.selectbox(
-    "Timeframe",
-    ["1d", "1h"],
-    index=0
-)
-
-show_bb = st.sidebar.checkbox("แสดง Bollinger Bands", value=True)
-show_ema = st.sidebar.checkbox("แสดง EMA", value=True)
-show_volume = st.sidebar.checkbox("แสดง Volume Spike", value=True)
-
-# =====================================================
-# DATA LOADER
-# =====================================================
-@st.cache_data(ttl=1800)
-def load_data(symbol, period, interval):
+@st.cache_data(ttl=1800)  # 30 นาที
+def get_stock_data(ticker, period, interval):
     try:
-        df = yf.download(
-            symbol,
-            period=period,
-            interval=interval,
-            auto_adjust=True,
-            progress=False
-        )
-
+        df = yf.download(ticker, period=period, interval=interval,
+                        auto_adjust=True, progress=False)
+        
         if df.empty:
             return None
-
+            
+        # จัดการ MultiIndex (บางตัวอย่างเช่น .BK)
         if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.droplevel(1)
-
-        # =====================================================
-        # INDICATORS
-        # =====================================================
-
+            df = df.droplevel(1, axis=1)
+            
+        df = df.round(4)
+        
+        # ==================== Indicators ====================
         # EMA
-        df['EMA20'] = df['Close'].ewm(span=20, adjust=False).mean()
-        df['EMA50'] = df['Close'].ewm(span=50, adjust=False).mean()
         df['EMA200'] = df['Close'].ewm(span=200, adjust=False).mean()
-
+        df['EMA50'] = df['Close'].ewm(span=50, adjust=False).mean()
+        
+        # Bollinger Bands
+        df['BB_middle'] = df['Close'].rolling(window=20).mean()
+        df['BB_std'] = df['Close'].rolling(window=20).std()
+        df['BB_upper'] = df['BB_middle'] + (df['BB_std'] * 2)
+        df['BB_lower'] = df['BB_middle'] - (df['BB_std'] * 2)
+        
         # RSI
         delta = df['Close'].diff()
-
         gain = delta.clip(lower=0)
         loss = -delta.clip(upper=0)
-
-        avg_gain = gain.ewm(alpha=1/14, min_periods=14, adjust=False).mean()
-        avg_loss = loss.ewm(alpha=1/14, min_periods=14, adjust=False).mean()
-
+        avg_gain = gain.ewm(com=13, min_periods=14).mean()
+        avg_loss = loss.ewm(com=13, min_periods=14).mean()
         rs = avg_gain / avg_loss
         df['RSI'] = 100 - (100 / (1 + rs))
-
+        
         # MACD
-        ema12 = df['Close'].ewm(span=12, adjust=False).mean()
-        ema26 = df['Close'].ewm(span=26, adjust=False).mean()
-
-        df['MACD'] = ema12 - ema26
+        exp12 = df['Close'].ewm(span=12, adjust=False).mean()
+        exp26 = df['Close'].ewm(span=26, adjust=False).mean()
+        df['MACD'] = exp12 - exp26
         df['Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
         df['MACD_Hist'] = df['MACD'] - df['Signal']
-
-        # Bollinger Bands
-        df['BB_MID'] = df['Close'].rolling(20).mean()
-        bb_std = df['Close'].rolling(20).std()
-
-        df['BB_UPPER'] = df['BB_MID'] + (bb_std * 2)
-        df['BB_LOWER'] = df['BB_MID'] - (bb_std * 2)
-
-        # Volume
-        df['VOL_MA20'] = df['Volume'].rolling(20).mean()
-        df['HIGH_VOLUME'] = df['Volume'] > (df['VOL_MA20'] * 2)
-
-        # ATR
-        high_low = df['High'] - df['Low']
-        high_close = np.abs(df['High'] - df['Close'].shift())
-        low_close = np.abs(df['Low'] - df['Close'].shift())
-
-        ranges = pd.concat([high_low, high_close, low_close], axis=1)
-        true_range = ranges.max(axis=1)
-
-        df['ATR'] = true_range.rolling(14).mean()
-        df['ATR_PERCENT'] = (df['ATR'] / df['Close']) * 100
-
-        # Support / Resistance
-        df['SUPPORT'] = df['Low'].rolling(20).min()
-        df['RESISTANCE'] = df['High'].rolling(20).max()
-
-        # Trend Score
-        trend_score = []
-
-        for i in range(len(df)):
-            score = 0
-
-            if df['Close'].iloc[i] > df['EMA200'].iloc[i]:
-                score += 1
-
-            if df['EMA50'].iloc[i] > df['EMA200'].iloc[i]:
-                score += 1
-
-            if df['MACD'].iloc[i] > df['Signal'].iloc[i]:
-                score += 1
-
-            if df['RSI'].iloc[i] > 50:
-                score += 1
-
-            trend_score.append(score)
-
-        df['TREND_SCORE'] = trend_score
-
-        return df.round(4)
-
+        
+        return df
     except Exception as e:
-        st.error(f"โหลดข้อมูลล้มเหลว: {e}")
+        st.error(f"เกิดข้อผิดพลาด: {str(e)}")
         return None
 
-# =====================================================
-# LOAD DATA
-# =====================================================
-if symbol:
-
-    df = load_data(
-        symbol,
-        period_map[selected_period],
-        interval
-    )
-
-    if df is None or len(df) < 30:
-        st.error("❌ ไม่พบข้อมูล หรือข้อมูลน้อยเกินไป")
+# ===================== MAIN =====================
+if ticker:
+    df = get_stock_data(ticker, period_map[selected_period], interval)
+    
+    if df is None or len(df) < 20:
+        st.error(f"❌ ไม่พบข้อมูลหุ้น `{ticker}` หรือข้อมูลน้อยเกินไป")
+        st.info("ตัวอย่าง: AAPL, TSLA, NVDA, PTT.BK, DELTA.BK, 0700.HK")
         st.stop()
 
+    st.success(f"✅ แสดงข้อมูล: **{ticker}** | {selected_period} | {interval}")
+
+    # ===================== กราฟราคาหลัก =====================
+    fig_price = go.Figure()
+    
+    fig_price.add_trace(go.Scatter(x=df.index, y=df['Close'], name='ราคาปิด', 
+                                  line=dict(color='#008080', width=2.5)))
+    fig_price.add_trace(go.Scatter(x=df.index, y=df['EMA200'], name='EMA 200', 
+                                  line=dict(color='orange', width=2, dash='dot')))
+    fig_price.add_trace(go.Scatter(x=df.index, y=df['EMA50'], name='EMA 50', 
+                                  line=dict(color='purple', width=1.5, dash='dash')))
+    
+    # Bollinger Bands
+    fig_price.add_trace(go.Scatter(x=df.index, y=df['BB_upper'], name='BB Upper', 
+                                  line=dict(color='rgba(255,0,0,0.4)', dash='dash')))
+    fig_price.add_trace(go.Scatter(x=df.index, y=df['BB_lower'], name='BB Lower', 
+                                  line=dict(color='rgba(0,0,255,0.4)', dash='dash'),
+                                  fill='tonexty', fillcolor='rgba(0,100,255,0.08)'))
+    fig_price.add_trace(go.Scatter(x=df.index, y=df['BB_middle'], name='BB Middle (SMA20)', 
+                                  line=dict(color='gray', dash='dot')))
+
+    fig_price.update_layout(
+        title=f"กราฟราคา {ticker} + Bollinger Bands & EMA",
+        template="plotly_white",
+        height=600,
+        hovermode="x unified",
+        legend=dict(x=0, y=1.02, xanchor="left", yanchor="bottom", orientation="h")
+    )
+    
+    st.plotly_chart(fig_price, use_container_width=True)
+
+    # ===================== Volume + RSI + MACD (ใน 2 คอลัมน์) =====================
+    col1, col2 = st.columns([1, 1])
+
+    with col1:
+        st.subheader("📊 ปริมาณการซื้อขาย")
+        fig_vol = go.Figure()
+        fig_vol.add_trace(go.Bar(x=df.index, y=df['Volume'], name='Volume', marker_color='#1E90FF'))
+        fig_vol.update_layout(template="plotly_white", height=320, hovermode="x unified")
+        st.plotly_chart(fig_vol, use_container_width=True)
+
+        st.subheader("📈 MACD")
+        fig_macd = make_subplots(rows=1, cols=1, shared_xaxes=True)
+        fig_macd.add_trace(go.Scatter(x=df.index, y=df['MACD'], name='MACD', line=dict(color='blue')))
+        fig_macd.add_trace(go.Scatter(x=df.index, y=df['Signal'], name='Signal', line=dict(color='orange')))
+        fig_macd.add_trace(go.Bar(x=df.index, y=df['MACD_Hist'], 
+                                name='Histogram',
+                                marker_color=['green' if x >= 0 else 'red' for x in df['MACD_Hist']]))
+        fig_macd.update_layout(template="plotly_white", height=320, hovermode="x unified")
+        st.plotly_chart(fig_macd, use_container_width=True)
+
+    with col2:
+        st.subheader("📈 RSI (14)")
+        fig_rsi = go.Figure()
+        
+        fig_rsi.add_hrect(70, 100, fillcolor="red", opacity=0.12, layer="below", line_width=0)
+        fig_rsi.add_hrect(30, 70, fillcolor="lightblue", opacity=0.12, layer="below", line_width=0)
+        fig_rsi.add_hrect(0, 30, fillcolor="green", opacity=0.12, layer="below", line_width=0)
+        
+        fig_rsi.add_trace(go.Scatter(x=df.index, y=df['RSI'], name='RSI', 
+                                    line=dict(color='#FF4500', width=2.5)))
+        
+        fig_rsi.add_hline(y=70, line_dash="dash", line_color="red")
+        fig_rsi.add_hline(y=30, line_dash="dash", line_color="green")
+        fig_rsi.add_hline(y=50, line_dash="dot", line_color="gray")
+        
+        latest_rsi = df['RSI'].iloc[-1]
+        fig_rsi.add_annotation(x=df.index[-1], y=latest_rsi, 
+                             text=f"{latest_rsi:.1f}", showarrow=True, arrowhead=1)
+        
+        fig_rsi.update_layout(template="plotly_white", height=640, hovermode="x unified", 
+                            yaxis=dict(range=[0, 100]))
+        st.plotly_chart(fig_rsi, use_container_width=True)
+
+    # ===================== สรุปสถานะ =====================
+    st.divider()
     latest = df.iloc[-1]
     prev = df.iloc[-2]
-
-    # =====================================================
-    # MARKET REGIME
-    # =====================================================
-    if latest['ATR_PERCENT'] > 5:
-        regime = "🔥 High Volatility"
-    elif latest['ATR_PERCENT'] < 2:
-        regime = "🧊 Low Volatility"
-    else:
-        regime = "⚖️ Normal Volatility"
-
-    # =====================================================
-    # AI BIAS ENGINE
-    # =====================================================
-    score = latest['TREND_SCORE']
-
-    if score >= 4:
-        bias = "🟢 STRONG BULLISH"
-        conviction = "HIGH"
-
-    elif score == 3:
-        bias = "🟡 BULLISH"
-        conviction = "MEDIUM"
-
-    elif score == 2:
-        bias = "⚪ NEUTRAL"
-        conviction = "LOW"
-
-    else:
-        bias = "🔴 BEARISH"
-        conviction = "MEDIUM"
-
-    # =====================================================
-    # SIGNALS
-    # =====================================================
-    golden_cross = (
-        df['EMA50'].iloc[-2] < df['EMA200'].iloc[-2]
-        and
-        df['EMA50'].iloc[-1] > df['EMA200'].iloc[-1]
-    )
-
-    macd_cross_up = (
-        df['MACD'].iloc[-2] < df['Signal'].iloc[-2]
-        and
-        df['MACD'].iloc[-1] > df['Signal'].iloc[-1]
-    )
-
-    breakout = latest['Close'] > latest['RESISTANCE'] * 0.995
-
-    # =====================================================
-    # TOP METRICS
-    # =====================================================
-    st.subheader(f"📌 {symbol} วิเคราะห์ล่าสุด")
-
-    c1, c2, c3, c4, c5 = st.columns(5)
-
-    price_change = ((latest['Close'] - prev['Close']) / prev['Close']) * 100
-
+    
+    change = ((latest['Close'] - prev['Close']) / prev['Close']) * 100
+    is_bullish = latest['Close'] > latest['EMA200']
+    
+    st.subheader(f"📌 สรุปสถานะล่าสุดของ {ticker}")
+    
+    c1, c2, c3, c4 = st.columns(4)
     with c1:
-        st.metric(
-            "Price",
-            f"{latest['Close']:.2f}",
-            f"{price_change:+.2f}%"
-        )
-
+        st.metric("ราคาล่าสุด", f"{latest['Close']:.2f}", f"{change:+.2f}%")
     with c2:
-        st.metric(
-            "RSI",
-            f"{latest['RSI']:.1f}"
-        )
-
+        st.metric("RSI", f"{latest['RSI']:.1f}")
     with c3:
-        st.metric(
-            "Trend Score",
-            f"{int(score)}/4"
-        )
-
+        st.metric("MACD Hist", f"{latest['MACD_Hist']:.3f}")
     with c4:
-        st.metric(
-            "Market Regime",
-            regime
-        )
-
-    with c5:
-        st.metric(
-            "Conviction",
-            conviction
-        )
-
-    # =====================================================
-    # AI SUMMARY
-    # =====================================================
-    st.divider()
-
-    st.subheader("🧠 AI วิเคราะห์")
-
-    if score >= 3:
-        st.success(
-            "Momentum ยังอยู่ฝั่ง Bullish | ราคาอยู่เหนือ EMA หลัก | "
-            "Trend Structure ยังแข็งแรง"
-        )
-    elif score == 2:
-        st.warning(
-            "ตลาดอยู่ในช่วง Neutral | Momentum ยังไม่ชัดเจน"
-        )
-    else:
-        st.error(
-            "โครงสร้างราคาอ่อนแรง | Bearish Pressure ยังเด่น"
-        )
-
-    # =====================================================
-    # SIGNAL BOXES
-    # =====================================================
-    signal_col1, signal_col2, signal_col3 = st.columns(3)
-
-    with signal_col1:
-        if golden_cross:
-            st.success("✅ Golden Cross Detected")
-        else:
-            st.info("ไม่มี Golden Cross")
-
-    with signal_col2:
-        if macd_cross_up:
-            st.success("✅ MACD Bullish Cross")
-        else:
-            st.info("MACD ยังไม่ Cross")
-
-    with signal_col3:
-        if breakout:
-            st.success("🚀 Resistance Breakout")
-        else:
-            st.info("ยังไม่ Breakout")
-
-    # =====================================================
-    # MAIN CHART
-    # =====================================================
-    st.divider()
-
-    st.subheader("📈 Price Action")
-
-    fig = go.Figure()
-
-    # Candlestick
-    fig.add_trace(
-        go.Candlestick(
-            x=df.index,
-            open=df['Open'],
-            high=df['High'],
-            low=df['Low'],
-            close=df['Close'],
-            name='Candles'
-        )
-    )
-
-    # EMA
-    if show_ema:
-        fig.add_trace(
-            go.Scatter(
-                x=df.index,
-                y=df['EMA20'],
-                name='EMA20',
-                line=dict(width=1.5)
-            )
-        )
-
-        fig.add_trace(
-            go.Scatter(
-                x=df.index,
-                y=df['EMA50'],
-                name='EMA50',
-                line=dict(width=2)
-            )
-        )
-
-        fig.add_trace(
-            go.Scatter(
-                x=df.index,
-                y=df['EMA200'],
-                name='EMA200',
-                line=dict(width=2.5)
-            )
-        )
-
-    # Bollinger Bands
-    if show_bb:
-        fig.add_trace(
-            go.Scatter(
-                x=df.index,
-                y=df['BB_UPPER'],
-                name='BB Upper',
-                line=dict(dash='dash')
-            )
-        )
-
-        fig.add_trace(
-            go.Scatter(
-                x=df.index,
-                y=df['BB_LOWER'],
-                name='BB Lower',
-                line=dict(dash='dash'),
-                fill='tonexty'
-            )
-        )
-
-    # Support / Resistance
-    fig.add_trace(
-        go.Scatter(
-            x=df.index,
-            y=df['SUPPORT'],
-            name='Support',
-            line=dict(dash='dot')
-        )
-    )
-
-    fig.add_trace(
-        go.Scatter(
-            x=df.index,
-            y=df['RESISTANCE'],
-            name='Resistance',
-            line=dict(dash='dot')
-        )
-    )
-
-    fig.update_layout(
-        template='plotly_white',
-        height=700,
-        hovermode='x unified',
-        xaxis_rangeslider_visible=False
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-    # =====================================================
-    # LOWER PANELS
-    # =====================================================
-    left, right = st.columns(2)
-
-    with left:
-
-        # Volume
-        st.subheader("📊 Volume")
-
-        volume_colors = [
-            'red' if close < open_ else 'green'
-            for close, open_ in zip(df['Close'], df['Open'])
-        ]
-
-        fig_vol = go.Figure()
-
-        fig_vol.add_trace(
-            go.Bar(
-                x=df.index,
-                y=df['Volume'],
-                marker_color=volume_colors,
-                name='Volume'
-            )
-        )
-
-        fig_vol.add_trace(
-            go.Scatter(
-                x=df.index,
-                y=df['VOL_MA20'],
-                name='Vol MA20'
-            )
-        )
-
-        if show_volume:
-            spike_df = df[df['HIGH_VOLUME'] == True]
-
-            fig_vol.add_trace(
-                go.Scatter(
-                    x=spike_df.index,
-                    y=spike_df['Volume'],
-                    mode='markers',
-                    marker=dict(size=10),
-                    name='Volume Spike'
-                )
-            )
-
-        fig_vol.update_layout(
-            template='plotly_white',
-            height=300
-        )
-
-        st.plotly_chart(fig_vol, use_container_width=True)
-
-        # MACD
-        st.subheader("📈 MACD")
-
-        hist_colors = []
-
-        for i in range(len(df)):
-
-            if i == 0:
-                hist_colors.append('gray')
-                continue
-
-            current = df['MACD_Hist'].iloc[i]
-            prev_hist = df['MACD_Hist'].iloc[i - 1]
-
-            if current >= 0:
-                if current > prev_hist:
-                    hist_colors.append('darkgreen')
-                else:
-                    hist_colors.append('lightgreen')
-            else:
-                if current < prev_hist:
-                    hist_colors.append('darkred')
-                else:
-                    hist_colors.append('salmon')
-
-        fig_macd = go.Figure()
-
-        fig_macd.add_trace(
-            go.Bar(
-                x=df.index,
-                y=df['MACD_Hist'],
-                marker_color=hist_colors,
-                name='Histogram'
-            )
-        )
-
-        fig_macd.add_trace(
-            go.Scatter(
-                x=df.index,
-                y=df['MACD'],
-                name='MACD'
-            )
-        )
-
-        fig_macd.add_trace(
-            go.Scatter(
-                x=df.index,
-                y=df['Signal'],
-                name='Signal'
-            )
-        )
-
-        fig_macd.update_layout(
-            template='plotly_white',
-            height=300
-        )
-
-        st.plotly_chart(fig_macd, use_container_width=True)
-
-    with right:
-
-        # RSI
-        st.subheader("📈 RSI")
-
-        fig_rsi = go.Figure()
-
-        fig_rsi.add_hrect(
-            y0=70,
-            y1=100,
-            opacity=0.1
-        )
-
-        fig_rsi.add_hrect(
-            y0=0,
-            y1=30,
-            opacity=0.1
-        )
-
-        fig_rsi.add_trace(
-            go.Scatter(
-                x=df.index,
-                y=df['RSI'],
-                name='RSI',
-                line=dict(width=2)
-            )
-        )
-
-        fig_rsi.add_hline(y=70, line_dash='dash')
-        fig_rsi.add_hline(y=30, line_dash='dash')
-        fig_rsi.add_hline(y=50, line_dash='dot')
-
-        fig_rsi.update_layout(
-            template='plotly_white',
-            height=620,
-            yaxis=dict(range=[0, 100])
-        )
-
-        st.plotly_chart(fig_rsi, use_container_width=True)
-
-    # =====================================================
-    # LOWER PANELS
-    # =====================================================
-    left, right = st.columns(2)
-
-    with left:
-
-        # Volume
-        st.subheader("📊 Volume")
-
-        volume_colors = [
-            'red' if close < open_ else 'green'
-            for close, open_ in zip(df['Close'], df['Open'])
-        ]
-
-        fig_vol = go.Figure()
-
-        fig_vol.add_trace(
-            go.Bar(
-                x=df.index,
-                y=df['Volume'],
-                marker_color=volume_colors,
-                name='Volume'
-            )
-        )
-
-        fig_vol.add_trace(
-            go.Scatter(
-                x=df.index,
-                y=df['VOL_MA20'],
-                name='Vol MA20'
-            )
-        )
-
-        if show_volume:
-            spike_df = df[df['HIGH_VOLUME'] == True]
-
-            fig_vol.add_trace(
-                go.Scatter(
-                    x=spike_df.index,
-                    y=spike_df['Volume'],
-                    mode='markers',
-                    marker=dict(size=10),
-                    name='Volume Spike'
-                )
-            )
-
-        fig_vol.update_layout(
-            template='plotly_white',
-            height=300
-        )
-
-        st.plotly_chart(fig_vol, use_container_width=True)
-
-        # MACD
-        st.subheader("📈 MACD")
-
-        hist_colors = []
-
-        for i in range(len(df)):
-
-            if i == 0:
-                hist_colors.append('gray')
-                continue
-
-            current = df['MACD_Hist'].iloc[i]
-            prev_hist = df['MACD_Hist'].iloc[i - 1]
-
-            if current >= 0:
-                if current > prev_hist:
-                    hist_colors.append('darkgreen')
-                else:
-                    hist_colors.append('lightgreen')
-            else:
-                if current < prev_hist:
-                    hist_colors.append('darkred')
-                else:
-                    hist_colors.append('salmon')
-
-        fig_macd = go.Figure()
-
-        fig_macd.add_trace(
-            go.Bar(
-                x=df.index,
-                y=df['MACD_Hist'],
-                marker_color=hist_colors,
-                name='Histogram'
-            )
-        )
-
-        fig_macd.add_trace(
-            go.Scatter(
-                x=df.index,
-                y=df['MACD'],
-                name='MACD'
-            )
-        )
-
-        fig_macd.add_trace(
-            go.Scatter(
-                x=df.index,
-                y=df['Signal'],
-                name='Signal'
-            )
-        )
-
-        fig_macd.update_layout(
-            template='plotly_white',
-            height=300
-        )
-
-        st.plotly_chart(fig_macd, use_container_width=True)
-
-    with right:
-
-        # RSI
-        st.subheader("📈 RSI")
-
-        fig_rsi = go.Figure()
-
-        fig_rsi.add_hrect(y0=70, y1=100, opacity=0.1)
-        fig_rsi.add_hrect(y0=0, y1=30, opacity=0.1)
-
-        fig_rsi.add_trace(
-            go.Scatter(
-                x=df.index,
-                y=df['RSI'],
-                name='RSI',
-                line=dict(width=2)
-            )
-        )
-
-        fig_rsi.add_hline(y=70, line_dash='dash')
-        fig_rsi.add_hline(y=30, line_dash='dash')
-        fig_rsi.add_hline(y=50, line_dash='dot')
-
-        fig_rsi.update_layout(
-            template='plotly_white',
-            height=620,
-            yaxis=dict(range=[0, 100])
-        )
-
-        st.plotly_chart(fig_rsi, use_container_width=True)
-
-    # =====================================================
-    # AI TRADE SETUP ENGINE
-    # =====================================================
-    st.divider()
-
-    st.subheader("🎯 AI Trade Setup Engine")
-
-    entry_price = latest['Close']
-    support_level = latest['SUPPORT']
-    resistance_level = latest['RESISTANCE']
-
-    stop_loss = support_level * 0.99
-    target_1 = resistance_level
-    target_2 = resistance_level * 1.03
-
-    risk = entry_price - stop_loss
-    reward = target_1 - entry_price
-
-    if risk > 0:
-        rr_ratio = reward / risk
-    else:
-        rr_ratio = 0
-
-    ai_col1, ai_col2, ai_col3 = st.columns(3)
-
-    with ai_col1:
-        st.metric(
-            "Suggested Entry",
-            f"{entry_price:.2f}"
-        )
-
-        st.metric(
-            "Stop Loss",
-            f"{stop_loss:.2f}"
-        )
-
-    with ai_col2:
-        st.metric(
-            "Target 1",
-            f"{target_1:.2f}"
-        )
-
-        st.metric(
-            "Target 2",
-            f"{target_2:.2f}"
-        )
-
-    with ai_col3:
-        st.metric(
-            "Risk/Reward",
-            f"{rr_ratio:.2f}"
-        )
-
-        st.metric(
-            "AI Bias",
-            bias
-        )
-
-    # =====================================================
-    # EXECUTION DECISION
-    # =====================================================
-    st.divider()
-
-    st.subheader("⚡ Execution Decision")
-
-    if score >= 3 and rr_ratio >= 2:
-        st.success(
-            "HIGH CONVICTION SETUP → Momentum และ Risk/Reward สนับสนุนการเข้า Position"
-        )
-
-    elif score >= 2 and rr_ratio >= 1:
-        st.warning(
-            "MEDIUM CONVICTION → สามารถเล่นได้ แต่ควรลดขนาด Position"
-        )
-
-    else:
-        st.error(
-            "LOW QUALITY SETUP → Risk/Reward หรือ Momentum ยังไม่ดีพอ"
-        )
-
-    # =====================================================
-    # MARKET STRUCTURE ANALYSIS
-    # =====================================================
-    st.divider()
-
-    st.subheader("🏛️ Market Structure Analysis")
-
-    structure_text = []
-
-    if latest['Close'] > latest['EMA200']:
-        structure_text.append("• ราคาอยู่เหนือ EMA200 → Long-Term Trend ยังแข็งแรง")
-    else:
-        structure_text.append("• ราคาอยู่ใต้ EMA200 → โครงสร้างหลักยังอ่อนแรง")
-
-    if latest['MACD'] > latest['Signal']:
-        structure_text.append("• MACD อยู่เหนือ Signal → Momentum ยังสนับสนุนฝั่ง Buy")
-    else:
-        structure_text.append("• MACD ต่ำกว่า Signal → Momentum เริ่มอ่อนแรง")
-
-    if latest['RSI'] > 70:
-        structure_text.append("• RSI เข้าเขต Overbought → ระวัง Pullback ระยะสั้น")
-    elif latest['RSI'] < 30:
-        structure_text.append("• RSI เข้าเขต Oversold → มีโอกาสเกิด Technical Rebound")
-    else:
-        structure_text.append("• RSI อยู่ในโซนสมดุล → Momentum ยังไม่สุดทาง")
-
-    if latest['HIGH_VOLUME']:
-        structure_text.append("• พบ Volume Spike → มี Institutional Activity")
-
-    for text in structure_text:
-        st.write(text)
-
-    st.caption(
-        'ระบบนี้เป็น Educational Dashboard ไม่ใช่คำแนะนำการลงทุน'
-    )
+        trend = "🟢 ขาขึ้น (เหนือ EMA200)" if is_bullish else "🔴 ขาลง (ใต้ EMA200)"
+        st.write("**แนวโน้มหลัก**")
+        st.write(trend)
+
+    # คำแนะนำ
+    if latest['RSI'] > 75:
+        st.error("**Overbought แรง** - ระวังการปรับตัวลง")
+    elif latest['RSI'] < 25:
+        st.success("**Oversold แรง** - พิจารณาเปิดตำแหน่ง")
+    elif 70 < latest['RSI'] < 75:
+        st.warning("**Overbought**")
+    elif 25 < latest['RSI'] < 30:
+        st.info("**Oversold**")
