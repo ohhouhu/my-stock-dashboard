@@ -4,7 +4,6 @@ import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime
 
-# ตั้งค่าหน้าเว็บ
 st.set_page_config(page_title="Stock Dashboard", layout="wide", page_icon="📈")
 st.title("📊 ระบบวิเคราะห์หุ้นส่วนตัว")
 
@@ -15,13 +14,12 @@ ticker = st.sidebar.text_input("กรอกสัญลักษณ์หุ้
 period_options = ["1 เดือน", "3 เดือน", "6 เดือน", "1 ปี", "2 ปี", "5 ปี"]
 selected_period = st.sidebar.selectbox("เลือกช่วงเวลา", period_options, index=3)
 
-# แปลงช่วงเวลา
 period_map = {
     "1 เดือน": "1mo", "3 เดือน": "3mo", "6 เดือน": "6mo",
     "1 ปี": "1y", "2 ปี": "2y", "5 ปี": "5y"
 }
 
-@st.cache_data(ttl=3600)  # Cache 1 ชั่วโมง
+@st.cache_data(ttl=3600)
 def get_stock_data(ticker, period):
     try:
         df = yf.download(ticker, period=period, interval="1d", 
@@ -30,14 +28,12 @@ def get_stock_data(ticker, period):
         if df.empty:
             return None
             
-        # จัดการคอลัมน์
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
         
-        # คำนวณ Indicators
         df['EMA200'] = df['Close'].ewm(span=200, adjust=False).mean()
         
-        # RSI 14
+        # RSI
         delta = df['Close'].diff()
         gain = delta.clip(lower=0)
         loss = -delta.clip(upper=0)
@@ -54,19 +50,19 @@ def get_stock_data(ticker, period):
         
         return df
     except Exception as e:
-        st.error(f"เกิดข้อผิดพลาด: {e}")
+        st.error(f"เกิดข้อผิดพลาด: {str(e)}")
         return None
 
-# ==================== แสดงผล ====================
+# ==================== MAIN ====================
 if ticker:
     df = get_stock_data(ticker, period_map[selected_period])
     
     if df is None or df.empty:
-        st.error(f"❌ ไม่พบข้อมูลหุ้น `{ticker}` กรุณาตรวจสอบสัญลักษณ์อีกครั้ง")
-        st.info("ตัวอย่าง: AAPL, TSLA, NVDA, 0700.HK, PTT.BK")
+        st.error(f"❌ ไม่พบข้อมูลหุ้น `{ticker}`")
+        st.info("ตัวอย่าง: AAPL, TSLA, NVDA, PTT.BK, 0700.HK")
         st.stop()
 
-    st.success(f"✅ กำลังแสดงข้อมูล: **{ticker}** | ช่วงเวลา: {selected_period}")
+    st.success(f"✅ แสดงข้อมูล: **{ticker}** | {selected_period}")
 
     # กราฟราคาหลัก
     fig_price = go.Figure()
@@ -80,7 +76,13 @@ if ticker:
         template="plotly_white",
         height=550,
         hovermode="x unified",
-        legend=dict(position="top left")
+        legend=dict(
+            x=0, 
+            y=1.02, 
+            xanchor="left", 
+            yanchor="bottom",
+            bgcolor="rgba(255,255,255,0.8)"
+        )
     )
     st.plotly_chart(fig_price, use_container_width=True)
 
@@ -92,8 +94,8 @@ if ticker:
         fig_rsi = go.Figure()
         fig_rsi.add_trace(go.Scatter(x=df.index, y=df['RSI'], 
                                    name='RSI', line=dict(color='#FF4500')))
-        fig_rsi.add_hline(y=70, line_dash="dash", line_color="red", annotation_text="Overbought")
-        fig_rsi.add_hline(y=30, line_dash="dash", line_color="green", annotation_text="Oversold")
+        fig_rsi.add_hline(y=70, line_dash="dash", line_color="red")
+        fig_rsi.add_hline(y=30, line_dash="dash", line_color="green")
         fig_rsi.update_layout(template="plotly_white", height=320)
         st.plotly_chart(fig_rsi, use_container_width=True)
 
@@ -128,10 +130,10 @@ if ticker:
     st.write(f"**แนวโน้มหลัก**: {trend}")
 
     if latest['RSI'] > 70:
-        st.warning("**Overbought** - ราคาอาจย่อตัวลงในระยะสั้น")
+        st.warning("**Overbought** - ราคาอาจย่อตัวลง")
     elif latest['RSI'] < 30:
         if is_uptrend:
-            st.success("**Oversold + ขาขึ้น** → โอกาสซื้อดี")
+            st.success("**Oversold + ขาขึ้น** → โอกาสซื้อ")
         else:
             st.error("**Oversold + ขาลง** → ระวัง")
     else:
