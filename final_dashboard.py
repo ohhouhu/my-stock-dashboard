@@ -28,6 +28,7 @@ if ticker:
     df = get_data(ticker)
     
     if not df.empty and 'Close' in df.columns:
+        
         # กราฟราคา
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=df.index, y=df['Close'], mode='lines', name='ราคาปิด', line=dict(color='#008080', width=2)))
@@ -63,6 +64,28 @@ if ticker:
         fig_macd.add_trace(go.Scatter(x=df.index, y=df['Signal_Line'], name='Signal', line=dict(color='orange')))
         fig_macd.update_layout(template="plotly_white", height=300)
         st.plotly_chart(fig_macd, use_container_width=True)
+        # --- เพิ่มส่วนตาราง Quick Stats ---
+        st.subheader(f"สรุปสถานะล่าสุดของ {ticker}")
+        
+        # ดึงข้อมูลล่าสุด
+        latest_price = df['Close'].iloc[-1]
+        prev_price = df['Close'].iloc[-2]
+        change_pct = ((latest_price - prev_price) / prev_price) * 100
+        latest_rsi = rsi.iloc[-1]
+        
+        # สร้าง Columns สำหรับวางตัวเลข 3 ตัว
+        col1, col2, col3 = st.columns(3)
+        
+        col1.metric(label="ราคาล่าสุด", value=f"${latest_price:.2f}", delta=f"{change_pct:.2f}%")
+        col2.metric(label="ค่า RSI", value=f"{latest_rsi:.2f}")
+        
+        # บอกสถานะ RSI
+        if latest_rsi > 70:
+            col3.info("สถานะ: Overbought (ระวัง!)")
+        elif latest_rsi < 30:
+            col3.success("สถานะ: Oversold (น่าสนใจ)")
+        else:
+            col3.write("สถานะ: ปกติ")
 
     else:
         st.warning("ไม่พบข้อมูลหุ้นตัวนี้ครับ")
