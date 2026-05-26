@@ -6,7 +6,7 @@ from plotly.subplots import make_subplots
 
 st.set_page_config(page_title="Stock Dashboard", layout="wide", page_icon="📈")
 
-st.title("📊 ระบบวิเคราะห์หุ้นส่วนตัว (ฉบับสมบูรณ์)")
+st.title("📊 ระบบวิเคราะห์หุ้นส่วนตัว (ฉบับสมบูรณ์ 100%)")
 
 # ===================== SIDEBAR =====================
 st.sidebar.header("⚙️ การตั้งค่า")
@@ -52,7 +52,7 @@ if ticker:
     if df is None: st.error(f"❌ ไม่พบข้อมูลหุ้น `{ticker}`"); st.stop()
     st.success(f"✅ กำลังวิเคราะห์: **{ticker}** | ช่วงเวลา: {selected_period}")
 
-    # กราฟราคา
+    # กราฟราคาหลัก
     fig_price = go.Figure()
     fig_price.add_trace(go.Scatter(x=df.index, y=df['Close'], name='ราคาปิด', line=dict(color='#008080', width=2.5)))
     fig_price.add_trace(go.Scatter(x=df.index, y=df['EMA50'], name='EMA50', line=dict(color='purple', width=1.5)))
@@ -60,6 +60,8 @@ if ticker:
     fig_price.add_trace(go.Scatter(x=df.index, y=df['BB_upper'], name='BB Upper', line=dict(color='rgba(255,0,0,0.3)', dash='dash')))
     fig_price.add_trace(go.Scatter(x=df.index, y=df['BB_lower'], name='BB Lower', line=dict(color='rgba(0,0,255,0.3)', dash='dash'), fill='tonexty', fillcolor='rgba(0,100,255,0.05)'))
     fig_price.update_layout(height=600, template="plotly_white", hovermode="x unified", legend=dict(orientation="h", x=0, y=1.05))
+    fig_price.update_xaxes(showspikes=True, spikecolor="gray", spikemode="across")
+    fig_price.update_yaxes(showspikes=True, spikecolor="gray", spikemode="across")
     st.plotly_chart(fig_price, use_container_width=True)
 
     # Volume & Indicators
@@ -77,31 +79,34 @@ if ticker:
         fig_macd.update_layout(height=300, title="MACD", template="plotly_white", hovermode="x unified")
         st.plotly_chart(fig_macd, use_container_width=True)
 
-    # ================= AI วิเคราะห์เชิงลึก (ท้ายสุด) =================
+    # AI วิเคราะห์เชิงลึก + แท่งเทียน
     st.divider()
     latest = df.iloc[-1]
+    prev = df.iloc[-2]
     is_bullish = latest['Close'] > latest['EMA200']
     
+    body = abs(latest['Close'] - latest['Open'])
+    wick_upper = latest['High'] - max(latest['Close'], latest['Open'])
+    wick_lower = min(latest['Close'], latest['Open']) - latest['Low']
+    pattern = "ไม่มีสัญญาณชัดเจน"
+    if wick_lower > body * 2 and wick_upper < body: pattern = "Hammer (สัญญาณกลับตัวขาขึ้น)"
+    elif wick_upper > body * 2 and wick_lower < body: pattern = "Shooting Star (สัญญาณกลับตัวขาลง)"
+    elif latest['Close'] > prev['Open'] and latest['Open'] < prev['Close'] and latest['Close'] > prev['Close']: pattern = "Bullish Engulfing (แรงซื้อกำลังมา)"
+
     st.subheader(f"🧠 AI วิเคราะห์เชิงลึก: {ticker}")
     col_a, col_b = st.columns([1, 1])
-    
     with col_a:
         st.markdown("### 🔍 สรุปภาพรวม")
-        trend_msg = "อยู่ในแนวโน้มขาขึ้น (แข็งแกร่ง)" if is_bullish else "อยู่ในแนวโน้มขาลง (ระมัดระวัง)"
-        st.write(f"• **แนวโน้มหลัก:** ราคาปัจจุบัน {trend_msg}")
-        if latest['RSI'] > 70: st.write("• **แรงซื้อ:** อยู่ในภาวะร้อนแรง (Overbought)")
-        elif latest['RSI'] < 30: st.write("• **แรงซื้อ:** อยู่ในภาวะขายมากเกินไป (Oversold)")
-        else: st.write("• **แรงซื้อ:** ระดับปกติ")
-            
+        st.write(f"• **แนวโน้มหลัก:** {'ขาขึ้น (แข็งแกร่ง)' if is_bullish else 'ขาลง (ระมัดระวัง)'}")
+        st.write(f"• **สถานะ RSI:** {'Overbought' if latest['RSI'] > 70 else 'Oversold' if latest['RSI'] < 30 else 'ปกติ'}")
+        st.write(f"• **รูปแบบแท่งเทียน:** {pattern}")
     with col_b:
         st.markdown("### 💡 คำแนะนำเบื้องต้น")
-        if latest['RSI'] > 70: st.warning("⚠️ **กลยุทธ์:** ไม่แนะนำไล่ราคา รอจังหวะย่อตัวหรือขายทำกำไร")
-        elif latest['RSI'] < 30:
-            if is_bullish: st.success("✅ **กลยุทธ์:** โอกาสเข้าสะสม (Buy the dip) ในแนวโน้มขาขึ้น")
-            else: st.error("❌ **กลยุทธ์:** ระวัง! หุ้นขาลง การเด้งอาจเป็นการเด้งชั่วคราว")
-        else: st.info("ℹ️ **กลยุทธ์:** รอดูสัญญาณถัดไป หากราคาหลุด EMA50 ให้เฝ้าระวัง")
+        if "Hammer" in pattern or "Engulfing" in pattern: st.success("✅ แท่งเทียนส่งสัญญาณบวก! ดูแรงซื้อประกอบ")
+        elif "Shooting Star" in pattern: st.warning("⚠️ แท่งเทียนส่งสัญญาณลบ! ระวังการขายทำกำไร")
+        else: st.info("ℹ️ แท่งเทียนยังไม่เกิดรูปแบบสำคัญ รอดูสัญญาณถัดไป")
 
     c1, c2, c3 = st.columns(3)
     c1.metric("ราคาปิดล่าสุด", f"{latest['Close']:.2f}")
-    c2.metric("RSI ปัจจุบัน", f"{latest['RSI']:.1f}")
-    c3.metric("ความห่าง EMA200", f"{((latest['Close'] - latest['EMA200']) / latest['EMA200'] * 100):.2f}%")
+    c2.metric("RSI", f"{latest['RSI']:.1f}")
+    c3.metric("ห่างจาก EMA200", f"{((latest['Close'] - latest['EMA200']) / latest['EMA200'] * 100):.2f}%")
