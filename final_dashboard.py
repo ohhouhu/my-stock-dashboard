@@ -43,15 +43,6 @@ if ticker:
         rs = avg_gain / avg_loss
         rsi = 100 - (100 / (1 + rs))
 
-        # --- แก้ไขปัญหา Multi-Index ตรงนี้ ---
-if isinstance(df.columns, pd.MultiIndex):
-    df.columns = df.columns.get_level_values(0)
-
-# --- หลังจากนี้ค่อยคำนวณ MACD ตามปกติ ---
-exp1 = df['Close'].ewm(span=12, adjust=False).mean()
-exp2 = df['Close'].ewm(span=26, adjust=False).mean()
-df['MACD'] = exp1 - exp2
-df['Signal_Line'] = df['MACD'].ewm(span=9, adjust=False).mean()
         # แสดงกราฟ RSI แบบสวยๆ ด้วย Plotly
         fig_rsi = go.Figure()
         fig_rsi.add_trace(go.Scatter(x=df.index, y=rsi, mode='lines', name='RSI', line=dict(color='#FF4500')))
@@ -62,11 +53,9 @@ df['Signal_Line'] = df['MACD'].ewm(span=9, adjust=False).mean()
        
         # เพิ่มการคำนวณ MACD
         st.subheader(f"กราฟ MACD ของ {ticker}")
-        # แทนที่ st.line_chart(df[['MACD', 'Signal_Line']]) ด้วย:
-        fig_macd = go.Figure()
-        fig_macd.add_trace(go.Scatter(x=df.index, y=df['MACD'], name='MACD', line=dict(color='blue')))
-        fig_macd.add_trace(go.Scatter(x=df.index, y=df['Signal_Line'], name='Signal', line=dict(color='orange')))
-        fig_macd.update_layout(title="กราฟ MACD", template="plotly_white", height=300)
-        st.plotly_chart(fig_macd, use_container_width=True)
+        exp1 = df['Close'].ewm(span=12, adjust=False).mean() # EMA 12 วัน
+        exp2 = df['Close'].ewm(span=26, adjust=False).mean() # EMA 26 วัน
+        df['MACD'] = exp1 - exp2
+        df['Signal_Line'] = df['MACD'].ewm(span=9, adjust=False).mean() # เส้นสัญญาณ
     else:
         st.warning("ไม่พบข้อมูลหุ้นตัวนี้ครับ")
