@@ -4,6 +4,27 @@ import pandas as pd
 import plotly.graph_objects as go
 
 st.set_page_config(page_title="Stock Dashboard", layout="wide")
+# --- 1. สร้างปุ่มสลับธีม ---
+dark_mode = st.sidebar.toggle("Dark Mode", value=False)
+
+# --- 2. เปลี่ยนสีตามสถานะปุ่ม ---
+if dark_mode:
+    bg_color = "#1e1e1e"  # เทาเข้ม
+    text_color = "#ffffff" # ขาว
+    st.markdown(f"""
+        <style>
+        .main {{ background-color: {bg_color}; color: {text_color}; }}
+        h1, h2, h3, div {{ color: {text_color}; }}
+        </style>
+        """, unsafe_allow_html=True)
+else:
+    bg_color = "#f5f5f5" # เทาอ่อน (ค่าเริ่มต้นเดิม)
+    text_color = "#000000"
+    st.markdown(f"""
+        <style>
+        .main {{ background-color: {bg_color}; color: {text_color}; }}
+        </style>
+        """, unsafe_allow_html=True)
 
 # ปรับ CSS ให้ดูสะอาดขึ้น
 st.markdown("""
