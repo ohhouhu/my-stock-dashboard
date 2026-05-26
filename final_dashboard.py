@@ -6,11 +6,15 @@ from plotly.subplots import make_subplots
 
 st.set_page_config(page_title="Stock Dashboard", layout="wide", page_icon="📈")
 
-st.title("📊 ระบบวิเคราะห์หุ้นส่วนตัว")
+st.title("📊 ระบบวิเคราะห์หุ้นส่วนตัว (ฉบับสมบูรณ์)")
 
 # ===================== SIDEBAR =====================
 st.sidebar.header("⚙️ การตั้งค่า")
 ticker = st.sidebar.text_input("กรอกสัญลักษณ์หุ้น:", value="AAPL").strip().upper()
+
+# เพิ่มคำแนะนำหุ้นไทย
+if ticker and not ticker.endswith('.BK') and len(ticker) < 5:
+    st.sidebar.info(f"💡 ทริค: หุ้นไทยต้องเติม .BK (เช่น {ticker}.BK)")
 
 period_options = ["1 เดือน", "3 เดือน", "6 เดือน", "1 ปี", "2 ปี", "5 ปี"]
 selected_period = st.sidebar.selectbox("เลือกช่วงเวลา", period_options, index=3)
@@ -23,18 +27,11 @@ period_map = {
 @st.cache_data(ttl=1800)
 def get_stock_data(ticker, period):
     try:
-        df = yf.download(ticker, period=period, interval="1d",
-                        auto_adjust=True, progress=False)
-        
-        if df.empty or len(df) < 20:
-            return None
-            
-        if isinstance(df.columns, pd.MultiIndex):
-            df = df.droplevel(1, axis=1)
+        df = yf.download(ticker, period=period, interval="1d", auto_adjust=True, progress=False)
+        if df.empty or len(df) < 20: return None
+        if isinstance(df.columns, pd.MultiIndex): df = df.droplevel(1, axis=1)
         
         df = df.round(4)
-        
-        # Indicators
         df['EMA200'] = df['Close'].ewm(span=200, adjust=False).mean()
         df['EMA50'] = df['Close'].ewm(span=50, adjust=False).mean()
         
@@ -64,94 +61,65 @@ def get_stock_data(ticker, period):
 # ===================== MAIN =====================
 if ticker:
     df = get_stock_data(ticker, period_map[selected_period])
-    
     if df is None:
         st.error(f"❌ ไม่พบข้อมูลหุ้น `{ticker}`")
         st.stop()
 
-    st.success(f"✅ แสดงข้อมูล: **{ticker}** | {selected_period}")
+    st.success(f"✅ กำลังวิเคราะห์: **{ticker}** | ช่วงเวลา: {selected_period}")
 
-    # 1. กราฟราคาหลัก (เต็มจอ)
+    # 1. กราฟราคาหลัก
     st.subheader(f"📈 กราฟราคา {ticker}")
     fig_price = go.Figure()
-    
-    fig_price.add_trace(go.Scatter(x=df.index, y=df['Close'], name='ราคาปิด', line=dict(color='#008080', width=2.8)))
-    fig_price.add_trace(go.Scatter(x=df.index, y=df['EMA50'], name='EMA50', line=dict(color='purple', width=1.8)))
+    fig_price.add_trace(go.Scatter(x=df.index, y=df['Close'], name='ราคาปิด', line=dict(color='#008080', width=2.5)))
+    fig_price.add_trace(go.Scatter(x=df.index, y=df['EMA50'], name='EMA50', line=dict(color='purple', width=1.5)))
     fig_price.add_trace(go.Scatter(x=df.index, y=df['EMA200'], name='EMA200', line=dict(color='orange', width=2, dash='dot')))
+    fig_price.add_trace(go.Scatter(x=df.index, y=df['BB_upper'], name='BB Upper', line=dict(color='rgba(255,0,0,0.3)', dash='dash')))
+    fig_price.add_trace(go.Scatter(x=df.index, y=df['BB_lower'], name='BB Lower', line=dict(color='rgba(0,0,255,0.3)', dash='dash'), fill='tonexty', fillcolor='rgba(0,100,255,0.05)'))
     
-    fig_price.add_trace(go.Scatter(x=df.index, y=df['BB_upper'], name='BB Upper', line=dict(color='rgba(255,0,0,0.4)', dash='dash')))
-    fig_price.add_trace(go.Scatter(x=df.index, y=df['BB_lower'], name='BB Lower', line=dict(color='rgba(0,0,255,0.4)', dash='dash'),
-                                  fill='tonexty', fillcolor='rgba(0,100,255,0.08)'))
-    
-    fig_price.update_layout(
-        height=650,
-        template="plotly_white",
-        hovermode="x unified",
-        legend=dict(orientation="h", x=0, y=1.05),
-    )
+    fig_price.update_layout(height=600, template="plotly_white", hovermode="x unified", legend=dict(orientation="h", x=0, y=1.05))
+    fig_price.update_xaxes(showspikes=True, spikecolor="gray", spikemode="across", spikesnap="cursor")
+    fig_price.update_yaxes(showspikes=True, spikecolor="gray", spikemode="across")
     st.plotly_chart(fig_price, use_container_width=True)
 
     # 2. Volume
     st.subheader("📊 ปริมาณการซื้อขาย (Volume)")
     fig_vol = go.Figure(go.Bar(x=df.index, y=df['Volume'], marker_color='#1E90FF'))
-    fig_vol.update_layout(height=380, template="plotly_white", hovermode="x unified")
+    fig_vol.update_layout(height=300, template="plotly_white", hovermode="x unified")
     st.plotly_chart(fig_vol, use_container_width=True)
 
     # 3. RSI
     st.subheader("📈 RSI (14)")
     fig_rsi = go.Figure()
-    
-    fig_rsi.add_hrect(70, 100, fillcolor="red", opacity=0.12)
-    fig_rsi.add_hrect(30, 70, fillcolor="lightblue", opacity=0.12)
-    fig_rsi.add_hrect(0, 30, fillcolor="green", opacity=0.12)
-    
-    fig_rsi.add_trace(go.Scatter(x=df.index, y=df['RSI'], name='RSI', 
-                                line=dict(color='#FF4500', width=2.5)))
-    
-    fig_rsi.add_hline(y=70, line_dash="dash", line_color="red")
-    fig_rsi.add_hline(y=30, line_dash="dash", line_color="green")
-    fig_rsi.add_hline(y=50, line_dash="dot", line_color="gray")
-    
-    latest_rsi = df['RSI'].iloc[-1]
-    fig_rsi.add_annotation(x=df.index[-1], y=latest_rsi, text=f"{latest_rsi:.1f}",
-                         showarrow=True, arrowhead=1, bgcolor="white")
-    
-    fig_rsi.update_layout(height=420, template="plotly_white", hovermode="x unified", 
-                        yaxis=dict(range=[0, 100]))
+    fig_rsi.add_hrect(70, 100, fillcolor="red", opacity=0.1); fig_rsi.add_hrect(30, 70, fillcolor="lightblue", opacity=0.1); fig_rsi.add_hrect(0, 30, fillcolor="green", opacity=0.1)
+    fig_rsi.add_trace(go.Scatter(x=df.index, y=df['RSI'], name='RSI', line=dict(color='#FF4500', width=2)))
+    fig_rsi.update_layout(height=350, template="plotly_white", hovermode="x unified", yaxis=dict(range=[0, 100]))
     st.plotly_chart(fig_rsi, use_container_width=True)
 
     # 4. MACD
     st.subheader("📈 MACD")
-    fig_macd = make_subplots(rows=1, cols=1, shared_xaxes=True)
+    fig_macd = go.Figure()
     fig_macd.add_trace(go.Scatter(x=df.index, y=df['MACD'], name='MACD', line=dict(color='blue')))
     fig_macd.add_trace(go.Scatter(x=df.index, y=df['Signal'], name='Signal', line=dict(color='orange')))
-    fig_macd.add_trace(go.Bar(x=df.index, y=df['MACD_Hist'], 
-                            name='Histogram',
-                            marker_color=['green' if x >= 0 else 'red' for x in df['MACD_Hist']]))
-    fig_macd.update_layout(height=420, template="plotly_white", hovermode="x unified")
+    fig_macd.add_trace(go.Bar(x=df.index, y=df['MACD_Hist'], name='Histogram', marker_color=['green' if x >= 0 else 'red' for x in df['MACD_Hist']]))
+    fig_macd.update_layout(height=350, template="plotly_white", hovermode="x unified")
     st.plotly_chart(fig_macd, use_container_width=True)
 
-    # 5. สรุปสถานะ
+    # 5. สรุปสถานะ (ไว้ท้ายสุด)
     st.divider()
     latest = df.iloc[-1]
-    prev = df.iloc[-2]
-    change = ((latest['Close'] - prev['Close']) / prev['Close']) * 100
+    change = ((latest['Close'] - df.iloc[-2]['Close']) / df.iloc[-2]['Close']) * 100
     is_bullish = latest['Close'] > latest['EMA200']
 
-    st.subheader("📌 สรุปสถานะล่าสุด")
-    
+    st.subheader(f"📌 สรุปสาเหตุและสถานะล่าสุด: {ticker}")
     c1, c2, c3 = st.columns(3)
-    with c1:
-        st.metric("ราคาล่าสุด", f"{latest['Close']:.2f}", f"{change:+.2f}%")
-    with c2:
-        st.metric("RSI", f"{latest['RSI']:.1f}")
-    with c3:
-        st.metric("MACD Hist", f"{latest['MACD_Hist']:.3f}")
+    c1.metric("ราคาล่าสุด", f"{latest['Close']:.2f}", f"{change:+.2f}%")
+    c2.metric("RSI", f"{latest['RSI']:.1f}")
+    c3.metric("แนวโน้มหลัก", "ขาขึ้น" if is_bullish else "ขาลง")
 
-    st.write(f"**แนวโน้มหลัก**: {'🟢 ขาขึ้น (เหนือ EMA200)' if is_bullish else '🔴 ขาลง (ใต้ EMA200)'}")
-
-    # คำแนะนำ
     if latest['RSI'] > 70:
-        st.warning("⚠️ **Overbought** - ราคาอาจย่อตัวลง")
+        st.warning("**สถานะ: Overbought** - ราคาขึ้นมาสูงมากในระยะสั้น ระวังการปรับฐานหรือย่อตัว")
     elif latest['RSI'] < 30:
-        st.success("✅ **Oversold** - มีโอกาส反彈")
+        if is_bullish: st.success("**สถานะ: Oversold ในแนวโน้มขาขึ้น** - เป็นจังหวะย่อตัวในขาขึ้นที่น่าสนใจ (Buy the dip)")
+        else: st.error("**สถานะ: Oversold ในแนวโน้มขาลง** - ระวังการรับมีด หุ้นอาจลงต่อได้อีก")
+    else:
+        st.info("สถานะ: ปกติ - ราคายังแกว่งตัวในระดับสมดุล")
