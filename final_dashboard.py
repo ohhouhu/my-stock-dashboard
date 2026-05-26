@@ -75,7 +75,8 @@ if ticker:
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=df.index, y=df['Close'], mode='lines', name='ราคาปิด', line=dict(color='#008080', width=2)))
         # เปลี่ยน template จาก "plotly_white" เป็น "plotly_dark" ถ้าพี่ชอบ Dark Mode
-        fig.update_layout(template="plotly_dark", ...)
+        # แก้ไขโค้ดส่วนที่ Error ของพี่
+        fig.update_layout(title=f"กราฟราคา {ticker}", template="plotly_dark", height=400)
         st.plotly_chart(fig, use_container_width=True)
 
         # คำนวณ RSI & MACD
