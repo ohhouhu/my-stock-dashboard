@@ -13,7 +13,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 st.title("📊 ระบบวิเคราะห์หุ้นส่วนตัว (Premium Look)")
-
+ticker = st.sidebar.text_input("ใส่ชื่อหุ้น (เช่น AAPL, PTT.BK):", value="AAPL")
 # เปลี่ยนจาก text_input เป็น multiselect ให้เลือกได้หลายตัว
 tickers = st.sidebar.multiselect("เลือกหุ้นที่ต้องการเปรียบเทียบ:", 
                                  ["AAPL", "NVDA", "TSLA", "MSFT", "GOOGL", "PTT.BK"], 
