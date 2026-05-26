@@ -558,60 +558,116 @@ if symbol:
         st.plotly_chart(fig_rsi, use_container_width=True)
 
     # =====================================================
-    # WATCHLIST SCANNER
+    # AI TRADE SETUP ENGINE
     # =====================================================
     st.divider()
 
-    st.subheader("🚀 Quick Watchlist Scanner")
+    st.subheader("🎯 AI Trade Setup Engine")
 
-    watchlist = [
-        'AAPL',
-        'TSLA',
-        'NVDA',
-        'META',
-        'AMZN',
-        'GOOGL',
-        'MSFT'
-    ]
+    entry_price = latest['Close']
+    support_level = latest['SUPPORT']
+    resistance_level = latest['RESISTANCE']
 
-    scan_results = []
+    stop_loss = support_level * 0.99
+    target_1 = resistance_level
+    target_2 = resistance_level * 1.03
 
-    for stock in watchlist:
+    risk = entry_price - stop_loss
+    reward = target_1 - entry_price
 
-        try:
-            scan_df = yf.download(
-                stock,
-                period='6mo',
-                interval='1d',
-                auto_adjust=True,
-                progress=False
-            )
+    if risk > 0:
+        rr_ratio = reward / risk
+    else:
+        rr_ratio = 0
 
-            if len(scan_df) < 50:
-                continue
+    ai_col1, ai_col2, ai_col3 = st.columns(3)
 
-            if isinstance(scan_df.columns, pd.MultiIndex):
-                scan_df.columns = scan_df.columns.droplevel(1)
+    with ai_col1:
+        st.metric(
+            "Suggested Entry",
+            f"{entry_price:.2f}"
+        )
 
-            close = scan_df['Close']
+        st.metric(
+            "Stop Loss",
+            f"{stop_loss:.2f}"
+        )
 
-            ema50 = close.ewm(span=50, adjust=False).mean()
-            ema200 = close.ewm(span=200, adjust=False).mean()
+    with ai_col2:
+        st.metric(
+            "Target 1",
+            f"{target_1:.2f}"
+        )
 
-            bullish = close.iloc[-1] > ema50.iloc[-1] > ema200.iloc[-1]
+        st.metric(
+            "Target 2",
+            f"{target_2:.2f}"
+        )
 
-            scan_results.append({
-                'Ticker': stock,
-                'Price': round(close.iloc[-1], 2),
-                'Bullish Structure': bullish
-            })
+    with ai_col3:
+        st.metric(
+            "Risk/Reward",
+            f"{rr_ratio:.2f}"
+        )
 
-        except:
-            pass
+        st.metric(
+            "AI Bias",
+            bias
+        )
 
-    scan_df = pd.DataFrame(scan_results)
+    # =====================================================
+    # EXECUTION DECISION
+    # =====================================================
+    st.divider()
 
-    st.dataframe(scan_df, use_container_width=True)
+    st.subheader("⚡ Execution Decision")
+
+    if score >= 3 and rr_ratio >= 2:
+        st.success(
+            "HIGH CONVICTION SETUP → Momentum และ Risk/Reward สนับสนุนการเข้า Position"
+        )
+
+    elif score >= 2 and rr_ratio >= 1:
+        st.warning(
+            "MEDIUM CONVICTION → สามารถเล่นได้ แต่ควรลดขนาด Position"
+        )
+
+    else:
+        st.error(
+            "LOW QUALITY SETUP → Risk/Reward หรือ Momentum ยังไม่ดีพอ"
+        )
+
+    # =====================================================
+    # MARKET STRUCTURE ANALYSIS
+    # =====================================================
+    st.divider()
+
+    st.subheader("🏛️ Market Structure Analysis")
+
+    structure_text = []
+
+    if latest['Close'] > latest['EMA200']:
+        structure_text.append("• ราคาอยู่เหนือ EMA200 → Long-Term Trend ยังแข็งแรง")
+    else:
+        structure_text.append("• ราคาอยู่ใต้ EMA200 → โครงสร้างหลักยังอ่อนแรง")
+
+    if latest['MACD'] > latest['Signal']:
+        structure_text.append("• MACD อยู่เหนือ Signal → Momentum ยังสนับสนุนฝั่ง Buy")
+    else:
+        structure_text.append("• MACD ต่ำกว่า Signal → Momentum เริ่มอ่อนแรง")
+
+    if latest['RSI'] > 70:
+        structure_text.append("• RSI เข้าเขต Overbought → ระวัง Pullback ระยะสั้น")
+    elif latest['RSI'] < 30:
+        structure_text.append("• RSI เข้าเขต Oversold → มีโอกาสเกิด Technical Rebound")
+    else:
+        structure_text.append("• RSI อยู่ในโซนสมดุล → Momentum ยังไม่สุดทาง")
+
+    if latest['HIGH_VOLUME']:
+        structure_text.append("• พบ Volume Spike → มี Institutional Activity")
+
+    for text in structure_text:
+        st.write(text)
 
     st.caption(
         'ระบบนี้เป็น Educational Dashboard ไม่ใช่คำแนะนำการลงทุน'
