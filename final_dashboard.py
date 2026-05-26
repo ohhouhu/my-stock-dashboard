@@ -56,5 +56,6 @@ if ticker:
         exp2 = df['Close'].ewm(span=26, adjust=False).mean() # EMA 26 วัน
         df['MACD'] = exp1 - exp2
         df['Signal_Line'] = df['MACD'].ewm(span=9, adjust=False).mean() # เส้นสัญญาณ
+        st.line_chart(df[['MACD', 'Signal_Line']])
     else:
         st.warning("ไม่พบข้อมูลหุ้นตัวนี้ครับ")
