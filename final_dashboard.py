@@ -82,8 +82,4 @@ if ticker:
         else:
             col3.write("สถานะ: ปกติ")
             
-        # Quick Stats
-        latest = df['Close'].iloc[-1]
-        col1, col2 = st.columns(2)
-        col1.metric("ราคาล่าสุด", f"${latest:.2f}")
-        col2.metric("ค่า RSI", f"{rsi.iloc[-1]:.2f}")
+   
