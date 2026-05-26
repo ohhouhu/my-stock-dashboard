@@ -52,7 +52,6 @@ if ticker:
         st.plotly_chart(fig_rsi, use_container_width=True)
        
         # เพิ่มการคำนวณ MACD
-        st.subheader(f"กราฟ MACD ของ {ticker}")
         exp1 = df['Close'].ewm(span=12, adjust=False).mean() # EMA 12 วัน
         exp2 = df['Close'].ewm(span=26, adjust=False).mean() # EMA 26 วัน
         df['MACD'] = exp1 - exp2
