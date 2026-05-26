@@ -5,16 +5,15 @@ import plotly.graph_objects as go
 
 st.set_page_config(page_title="Stock Dashboard", layout="wide")
 
-st.title("📊 ระบบวิเคราะห์หุ้นส่วนตัว (ไร้ขีดจำกัด)")
+st.title("📊 ระบบวิเคราะห์หุ้นส่วนตัว (สวยงามแบบเดิม)")
 
 # Sidebar
 st.sidebar.header("การตั้งค่า")
-# 1. หุ้นรายตัว
 ticker = st.sidebar.text_input("วิเคราะห์รายตัว:", value="AAPL")
 
-# 2. เปรียบเทียบหลายตัว (พิมพ์คั่นด้วยเครื่องหมายคอมม่า)
-tickers_input = st.sidebar.text_input("เปรียบเทียบหุ้น (พิมพ์ชื่อหุ้นคั่นด้วยคอมม่า เช่น AAPL, NVDA, PTT.BK):", value="AAPL, NVDA")
-tickers = [t.strip().upper() for t in tickers_input.split(',')]
+# ใช้ Multiselect ที่สวยงาม (แบบที่พี่ชอบ)
+default_tickers = ["AAPL", "NVDA", "TSLA", "MSFT", "PTT.BK"]
+tickers = st.sidebar.multiselect("เปรียบเทียบหุ้น:", default_tickers, default=["AAPL", "NVDA"])
 
 @st.cache_data
 def get_data(ticker):
@@ -23,16 +22,12 @@ def get_data(ticker):
     df['EMA200'] = df['Close'].ewm(span=200, adjust=False).mean()
     return df
 
-# 1. ส่วนเปรียบเทียบ (แบบพิมพ์ชื่อเอง)
+# 1. ส่วนเปรียบเทียบ (แบบ Multiselect สวยๆ)
 if tickers:
     st.subheader("กราฟเปรียบเทียบผลตอบแทน (%)")
-    try:
-        df_multi = yf.download(tickers, period="1y", interval="1d", auto_adjust=True)['Close']
-        if not df_multi.empty:
-            norm_df = (df_multi / df_multi.iloc[0] - 1) * 100
-            st.line_chart(norm_df)
-    except:
-        st.error("ตรวจสอบชื่อหุ้นอีกครั้ง (หุ้นไทยต้องมี .BK ต่อท้าย)")
+    df_multi = yf.download(tickers, period="1y", interval="1d", auto_adjust=True)['Close']
+    norm_df = (df_multi / df_multi.iloc[0] - 1) * 100
+    st.line_chart(norm_df)
 
 st.divider()
 
