@@ -22,8 +22,8 @@ period_map = {
 @st.cache_data(ttl=3600)
 def get_stock_data(ticker, period):
     try:
-        df = yfinance.download(ticker, period=period, interval="1d", 
-                              auto_adjust=True, progress=False)
+        df = yf.download(ticker, period=period, interval="1d", 
+                        auto_adjust=True, progress=False)
         
         if df.empty:
             return None
@@ -96,43 +96,23 @@ if ticker:
     fig_volume.update_layout(template="plotly_white", height=300, hovermode="x unified")
     st.plotly_chart(fig_volume, use_container_width=True)
 
-    # ====================== RSI แต่งใหม่ (สวยขึ้น) ======================
+    # RSI (แต่งสวย)
     st.subheader("📈 RSI (14)")
     fig_rsi = go.Figure()
+    fig_rsi.add_hrect(y0=70, y1=100, line_width=0, fillcolor="red", opacity=0.15)
+    fig_rsi.add_hrect(y0=30, y1=70, line_width=0, fillcolor="lightblue", opacity=0.15)
+    fig_rsi.add_hrect(y0=0, y1=30, line_width=0, fillcolor="green", opacity=0.15)
     
-    # พื้นที่สีโซน
-    fig_rsi.add_hrect(y0=70, y1=100, line_width=0, fillcolor="red", opacity=0.15, annotation_text="Overbought")
-    fig_rsi.add_hrect(y0=30, y1=70, line_width=0, fillcolor="lightblue", opacity=0.15, annotation_text="ปกติ")
-    fig_rsi.add_hrect(y0=0, y1=30, line_width=0, fillcolor="green", opacity=0.15, annotation_text="Oversold")
+    fig_rsi.add_trace(go.Scatter(x=df.index, y=df['RSI'], name='RSI (14)', line=dict(color='#FF4500', width=2.5)))
+    fig_rsi.add_hline(y=70, line_dash="dash", line_color="red")
+    fig_rsi.add_hline(y=50, line_dash="dot", line_color="gray")
+    fig_rsi.add_hline(y=30, line_dash="dash", line_color="green")
     
-    # เส้น RSI
-    fig_rsi.add_trace(go.Scatter(x=df.index, y=df['RSI'], 
-                               name='RSI (14)', 
-                               line=dict(color='#FF4500', width=2.5)))
-    
-    # เส้นสำคัญ
-    fig_rsi.add_hline(y=70, line_dash="dash", line_color="red", annotation_text="70")
-    fig_rsi.add_hline(y=50, line_dash="dot", line_color="gray", annotation_text="50")
-    fig_rsi.add_hline(y=30, line_dash="dash", line_color="green", annotation_text="30")
-    
-    # ค่าล่าสุด
     latest_rsi = df['RSI'].iloc[-1]
-    fig_rsi.add_annotation(
-        x=df.index[-1], y=latest_rsi,
-        text=f" {latest_rsi:.1f}",
-        showarrow=True,
-        arrowhead=1,
-        bgcolor="white",
-        bordercolor="#FF4500"
-    )
+    fig_rsi.add_annotation(x=df.index[-1], y=latest_rsi, text=f"{latest_rsi:.1f}", 
+                         showarrow=True, arrowhead=1, bgcolor="white")
     
-    fig_rsi.update_layout(
-        template="plotly_white",
-        height=380,
-        hovermode="x unified",
-        yaxis=dict(range=[0, 100], title="RSI"),
-        legend=dict(x=0, y=1.02, xanchor="left", yanchor="bottom")
-    )
+    fig_rsi.update_layout(template="plotly_white", height=380, hovermode="x unified", yaxis=dict(range=[0, 100]))
     st.plotly_chart(fig_rsi, use_container_width=True)
 
     # MACD
@@ -144,12 +124,7 @@ if ticker:
                             name='Histogram', 
                             marker_color=['green' if x >= 0 else 'red' for x in df['MACD_Hist']]))
     
-    fig_macd.update_layout(
-        template="plotly_white",
-        height=350,
-        hovermode="x unified",
-        legend=dict(x=0, y=1.02, xanchor="left", yanchor="bottom")
-    )
+    fig_macd.update_layout(template="plotly_white", height=350, hovermode="x unified")
     fig_macd.add_hline(y=0, line_dash="dash", line_color="gray")
     st.plotly_chart(fig_macd, use_container_width=True)
 
