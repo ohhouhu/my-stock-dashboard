@@ -76,13 +76,12 @@ if ticker:
     # ====================== SIGNAL GENERATOR ======================
     st.subheader("🚨 Signal Generator (สัญญาณซื้อ-ขายอัตโนมัติ)")
 
-    # คำนวณสัญญาณ
     is_uptrend = latest['Close'] > latest['EMA200']
     rsi = latest['RSI']
     macd_cross_up = latest['MACD'] > latest['Signal'] and prev['MACD'] <= prev['Signal']
     macd_cross_down = latest['MACD'] < latest['Signal'] and prev['MACD'] >= prev['Signal']
-    near_lower_bb = latest['Close'] <= latest['BB_lower'] * 1.01
-    near_upper_bb = latest['Close'] >= latest['BB_upper'] * 0.99
+    near_lower_bb = latest['Close'] <= latest['BB_lower'] * 1.02
+    near_upper_bb = latest['Close'] >= latest['BB_upper'] * 0.98
 
     score = 0
     reasons = []
@@ -99,22 +98,17 @@ if ticker:
     elif rsi > 65:
         score -= 3
         reasons.append("❌ RSI สูงกว่า 65 (Overbought)")
-    elif 45 <= rsi <= 55:
-        reasons.append("➖ RSI อยู่ในระดับสมดุล")
 
     if macd_cross_up:
         score += 2
-        reasons.append("✅ MACD ตัดขึ้น (Bullish)")
+        reasons.append("✅ MACD ตัดขึ้น")
     elif macd_cross_down:
         score -= 2
-        reasons.append("❌ MACD ตัดลง (Bearish)")
+        reasons.append("❌ MACD ตัดลง")
 
     if near_lower_bb and is_uptrend:
         score += 2
-        reasons.append("✅ ราคาใกล้ Bollinger Lower Band + ขาขึ้น")
-    elif near_upper_bb:
-        score -= 2
-        reasons.append("❌ ราคาใกล้ Bollinger Upper Band")
+        reasons.append("✅ ราคาใกล้ Lower Band + ขาขึ้น")
 
     # กำหนดสัญญาณ
     if score >= 6:
@@ -133,70 +127,90 @@ if ticker:
         signal = "⚪ **NEUTRAL**"
         color = "gray"
 
-    # แสดงสัญญาณหลัก
     st.markdown(f"""
     <h2 style="color:{color}; text-align:center; font-size:28px;">
         {signal} (Score: {score}/10)
     </h2>
     """, unsafe_allow_html=True)
 
-    # แสดงเหตุผล
-    st.write("**เหตุผลหลัก:**")
     for reason in reasons:
         st.write(reason)
 
+    # ====================== TAKE PROFIT & STOP LOSS ======================
+    st.subheader("🎯 Take Profit / Stop Loss แนะนำ")
+
+    current_price = latest['Close']
+    bb_upper = latest['BB_upper']
+    bb_lower = latest['BB_lower']
+
+    if signal in ["🟢 **STRONG BUY**", "🟢 **BUY**"]:
+        # สำหรับ Buy
+        stop_loss = max(bb_lower * 0.98, current_price * 0.93)   # ไม่ต่ำกว่า 7%
+        take_profit1 = current_price + (current_price - stop_loss) * 2   # Risk:Reward 1:2
+        take_profit2 = current_price + (current_price - stop_loss) * 3   # Risk:Reward 1:3
+        
+        risk = current_price - stop_loss
+        reward1 = take_profit1 - current_price
+        reward2 = take_profit2 - current_price
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Stop Loss", f"{stop_loss:.2f}", f"-{((current_price-stop_loss)/current_price*100):.1f}%")
+        with col2:
+            st.metric("Take Profit 1 (1:2)", f"{take_profit1:.2f}", f"+{((reward1/risk)):.1f}x")
+        with col3:
+            st.metric("Take Profit 2 (1:3)", f"{take_profit2:.2f}", f"+{((reward2/risk)):.1f}x")
+
+        st.info(f"**คำแนะนำ**: ตั้ง Stop Loss ที่ {stop_loss:.2f} และ Target หลักที่ {take_profit1:.2f}")
+
+    elif signal in ["🔴 **STRONG SELL**", "🔴 **SELL**"]:
+        # สำหรับ Sell
+        stop_loss = min(bb_upper * 1.02, current_price * 1.07)
+        take_profit1 = current_price - (stop_loss - current_price) * 2
+        take_profit2 = current_price - (stop_loss - current_price) * 3
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Stop Loss", f"{stop_loss:.2f}", f"+{((stop_loss-current_price)/current_price*100):.1f}%")
+        with col2:
+            st.metric("Take Profit 1 (1:2)", f"{take_profit1:.2f}")
+        with col3:
+            st.metric("Take Profit 2 (1:3)", f"{take_profit2:.2f}")
+        
+        st.info("**คำแนะนำ**: สำหรับ Short Sell")
+
+    else:
+        st.write("⚪ **สถานะ Neutral** ไม่แนะนำเปิดตำแหน่งใหม่ในขณะนี้")
+
     st.divider()
 
-    # กราฟราคาหลัก + Bollinger Bands
+    # กราฟและส่วนอื่นๆ (เหมือนเดิม)
     fig_price = go.Figure()
     fig_price.add_trace(go.Scatter(x=df.index, y=df['Close'], name='ราคาปิด', line=dict(color='#008080', width=2)))
     fig_price.add_trace(go.Scatter(x=df.index, y=df['BB_upper'], name='BB Upper', line=dict(color='rgba(255,0,0,0.3)', dash='dash')))
     fig_price.add_trace(go.Scatter(x=df.index, y=df['BB_lower'], name='BB Lower', line=dict(color='rgba(0,0,255,0.3)', dash='dash'), fill='tonexty', fillcolor='rgba(0,0,255,0.05)'))
-    fig_price.add_trace(go.Scatter(x=df.index, y=df['BB_middle'], name='BB Middle', line=dict(color='gray', dash='dot')))
     fig_price.add_trace(go.Scatter(x=df.index, y=df['EMA200'], name='EMA 200', line=dict(color='orange', width=2, dash='dot')))
     
-    fig_price.update_layout(title=f"กราฟราคา {ticker} + Bollinger Bands", template="plotly_white", height=500, hovermode="x unified")
+    fig_price.update_layout(title=f"กราฟราคา {ticker}", template="plotly_white", height=500, hovermode="x unified")
     st.plotly_chart(fig_price, use_container_width=True)
 
-    # RSI, Volume, MACD (เหมือนเดิม)
+    # RSI + MACD (ย่อ)
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("RSI (14)")
         fig_rsi = go.Figure()
         fig_rsi.add_hrect(y0=70, y1=100, fillcolor="red", opacity=0.15)
-        fig_rsi.add_hrect(y0=30, y1=70, fillcolor="lightblue", opacity=0.15)
         fig_rsi.add_hrect(y0=0, y1=30, fillcolor="green", opacity=0.15)
-        fig_rsi.add_trace(go.Scatter(x=df.index, y=df['RSI'], name='RSI', line=dict(color='#FF4500', width=2.5)))
-        fig_rsi.add_hline(y=70, line_dash="dash", line_color="red")
-        fig_rsi.add_hline(y=30, line_dash="dash", line_color="green")
-        fig_rsi.update_layout(template="plotly_white", height=350, yaxis=dict(range=[0,100]))
+        fig_rsi.add_trace(go.Scatter(x=df.index, y=df['RSI'], line=dict(color='#FF4500', width=2.5)))
+        fig_rsi.update_layout(template="plotly_white", height=320, yaxis=dict(range=[0,100]))
         st.plotly_chart(fig_rsi, use_container_width=True)
 
     with col2:
-        st.subheader("Volume")
-        fig_vol = go.Figure()
-        fig_vol.add_trace(go.Bar(x=df.index, y=df['Volume'], marker_color='#1E90FF'))
-        fig_vol.update_layout(template="plotly_white", height=350)
-        st.plotly_chart(fig_vol, use_container_width=True)
-
-    st.subheader("MACD")
-    fig_macd = make_subplots(rows=1, cols=1)
-    fig_macd.add_trace(go.Scatter(x=df.index, y=df['MACD'], name='MACD', line=dict(color='blue')))
-    fig_macd.add_trace(go.Scatter(x=df.index, y=df['Signal'], name='Signal', line=dict(color='orange')))
-    fig_macd.add_trace(go.Bar(x=df.index, y=df['MACD_Hist'], name='Histogram',
-                            marker_color=['green' if x >= 0 else 'red' for x in df['MACD_Hist']]))
-    fig_macd.update_layout(template="plotly_white", height=350)
-    fig_macd.add_hline(y=0, line_dash="dash", line_color="gray")
-    st.plotly_chart(fig_macd, use_container_width=True)
-
-    # สรุปสถานะ
-    st.divider()
-    st.subheader(f"📌 สรุปสถานะล่าสุดของ {ticker}")
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.metric("ราคาล่าสุด", f"{latest['Close']:.2f}")
-    with c2:
-        change = ((latest['Close'] - prev['Close']) / prev['Close']) * 100
-        st.metric("เปลี่ยนแปลง", f"{change:+.2f}%")
-    with c3:
-        st.metric("RSI", f"{latest['RSI']:.1f}")
+        st.subheader("MACD")
+        fig_macd = make_subplots(rows=1, cols=1)
+        fig_macd.add_trace(go.Scatter(x=df.index, y=df['MACD'], name='MACD', line=dict(color='blue')))
+        fig_macd.add_trace(go.Scatter(x=df.index, y=df['Signal'], name='Signal', line=dict(color='orange')))
+        fig_macd.add_trace(go.Bar(x=df.index, y=df['MACD_Hist'], name='Histogram',
+                                marker_color=['green' if x >= 0 else 'red' for x in df['MACD_Hist']]))
+        fig_macd.update_layout(template="plotly_white", height=320)
+        st.plotly_chart(fig_macd, use_container_width=True)
