@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 
 st.set_page_config(page_title="Stock Dashboard", layout="wide")
 
-# ปรับ CSS ให้ดูสะอาดขึ้นนิดหน่อย
+# ปรับ CSS ให้ดูสะอาดขึ้น
 st.markdown("""
     <style>
     .main { background-color: #f5f5f5; }
@@ -19,23 +19,23 @@ ticker = st.sidebar.text_input("ใส่ชื่อหุ้น (เช่น 
 @st.cache_data
 def get_data(ticker):
     df = yf.download(ticker, period="1y", interval="1d", auto_adjust=True)
+    # แก้ปัญหา Multi-Index ตั้งแต่ดึงข้อมูล
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
     return df
 
 if ticker:
     df = get_data(ticker)
     
     if not df.empty and 'Close' in df.columns:
-        close_price = df['Close']
-        if isinstance(close_price, pd.DataFrame): close_price = close_price.iloc[:, 0]
-        
-        # ใช้ Plotly แทน line_chart ธรรมดา
+        # กราฟราคา
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=df.index, y=close_price, mode='lines', name='ราคาปิด', line=dict(color='#008080', width=2)))
+        fig.add_trace(go.Scatter(x=df.index, y=df['Close'], mode='lines', name='ราคาปิด', line=dict(color='#008080', width=2)))
         fig.update_layout(title=f"กราฟราคา {ticker}", template="plotly_white", height=400)
         st.plotly_chart(fig, use_container_width=True)
 
         # คำนวณ RSI
-        delta = close_price.diff()
+        delta = df['Close'].diff()
         gain = (delta.where(delta > 0, 0))
         loss = (-delta.where(delta < 0, 0))
         avg_gain = gain.rolling(window=14).mean()
@@ -43,19 +43,26 @@ if ticker:
         rs = avg_gain / avg_loss
         rsi = 100 - (100 / (1 + rs))
 
-        # แสดงกราฟ RSI แบบสวยๆ ด้วย Plotly
+        st.subheader("ดัชนี RSI (14 วัน)")
         fig_rsi = go.Figure()
         fig_rsi.add_trace(go.Scatter(x=df.index, y=rsi, mode='lines', name='RSI', line=dict(color='#FF4500')))
         fig_rsi.add_hline(y=70, line_dash="dash", line_color="red")
         fig_rsi.add_hline(y=30, line_dash="dash", line_color="green")
-        fig_rsi.update_layout(title="ดัชนี RSI (14 วัน)", template="plotly_white", height=300)
+        fig_rsi.update_layout(template="plotly_white", height=300)
         st.plotly_chart(fig_rsi, use_container_width=True)
-
-        # เพิ่มการคำนวณ MACD
-        exp1 = df['Close'].ewm(span=12, adjust=False).mean() # EMA 12 วัน
-        exp2 = df['Close'].ewm(span=26, adjust=False).mean() # EMA 26 วัน
+        
+        # คำนวณ MACD
+        exp1 = df['Close'].ewm(span=12, adjust=False).mean()
+        exp2 = df['Close'].ewm(span=26, adjust=False).mean()
         df['MACD'] = exp1 - exp2
-        df['Signal_Line'] = df['MACD'].ewm(span=9, adjust=False).mean() # เส้นสัญญาณ
-       
-        else:
+        df['Signal_Line'] = df['MACD'].ewm(span=9, adjust=False).mean()
+        
+        st.subheader(f"กราฟ MACD ของ {ticker}")
+        fig_macd = go.Figure()
+        fig_macd.add_trace(go.Scatter(x=df.index, y=df['MACD'], name='MACD', line=dict(color='blue')))
+        fig_macd.add_trace(go.Scatter(x=df.index, y=df['Signal_Line'], name='Signal', line=dict(color='orange')))
+        fig_macd.update_layout(template="plotly_white", height=300)
+        st.plotly_chart(fig_macd, use_container_width=True)
+
+    else:
         st.warning("ไม่พบข้อมูลหุ้นตัวนี้ครับ")
