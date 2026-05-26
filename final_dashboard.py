@@ -5,33 +5,21 @@ import plotly.graph_objects as go
 
 st.set_page_config(page_title="Stock Dashboard", layout="wide")
 
-st.title("📊 ระบบวิเคราะห์หุ้นส่วนตัว (สวยงามแบบเดิม)")
+st.title("📊 ระบบวิเคราะห์หุ้นส่วนตัว")
 
 # Sidebar
 st.sidebar.header("การตั้งค่า")
 ticker = st.sidebar.text_input("วิเคราะห์รายตัว:", value="AAPL")
 
-# ใช้ Multiselect ที่สวยงาม (แบบที่พี่ชอบ)
-default_tickers = ["AAPL", "NVDA", "TSLA", "MSFT", "PTT.BK"]
-tickers = st.sidebar.multiselect("เปรียบเทียบหุ้น:", default_tickers, default=["AAPL", "NVDA"])
-
 @st.cache_data
 def get_data(ticker):
     df = yf.download(ticker, period="1y", interval="1d", auto_adjust=True)
     if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
+    # เพิ่มเส้น EMA 200
     df['EMA200'] = df['Close'].ewm(span=200, adjust=False).mean()
     return df
 
-# 1. ส่วนเปรียบเทียบ (แบบ Multiselect สวยๆ)
-if tickers:
-    st.subheader("กราฟเปรียบเทียบผลตอบแทน (%)")
-    df_multi = yf.download(tickers, period="1y", interval="1d", auto_adjust=True)['Close']
-    norm_df = (df_multi / df_multi.iloc[0] - 1) * 100
-    st.line_chart(norm_df)
-
-st.divider()
-
-# 2. วิเคราะห์เจาะลึก
+# วิเคราะห์เจาะลึก
 if ticker:
     df = get_data(ticker)
     if not df.empty and 'Close' in df.columns:
@@ -70,7 +58,7 @@ if ticker:
             fig_macd.update_layout(template="plotly_white", height=250)
             st.plotly_chart(fig_macd, use_container_width=True)
 
-        # 3. สรุปผลสถานะ (ไว้ท้ายสุด)
+        # สรุปผลสถานะท้ายสุด
         st.divider()
         st.subheader(f"สรุปสาเหตุและสถานะล่าสุด: {ticker}")
         latest_rsi = rsi.iloc[-1]
