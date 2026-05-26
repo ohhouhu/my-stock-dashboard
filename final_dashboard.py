@@ -5,27 +5,34 @@ import plotly.graph_objects as go
 
 st.set_page_config(page_title="Stock Dashboard", layout="wide")
 
-st.title("📊 ระบบวิเคราะห์หุ้นส่วนตัว")
+st.title("📊 ระบบวิเคราะห์หุ้นส่วนตัว (ไร้ขีดจำกัด)")
 
 # Sidebar
 st.sidebar.header("การตั้งค่า")
+# 1. หุ้นรายตัว
 ticker = st.sidebar.text_input("วิเคราะห์รายตัว:", value="AAPL")
-tickers = st.sidebar.multiselect("เปรียบเทียบหุ้น:", ["AAPL", "NVDA", "TSLA", "MSFT", "PTT.BK"], default=["AAPL", "NVDA"])
+
+# 2. เปรียบเทียบหลายตัว (พิมพ์คั่นด้วยเครื่องหมายคอมม่า)
+tickers_input = st.sidebar.text_input("เปรียบเทียบหุ้น (พิมพ์ชื่อหุ้นคั่นด้วยคอมม่า เช่น AAPL, NVDA, PTT.BK):", value="AAPL, NVDA")
+tickers = [t.strip().upper() for t in tickers_input.split(',')]
 
 @st.cache_data
 def get_data(ticker):
     df = yf.download(ticker, period="1y", interval="1d", auto_adjust=True)
     if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
-    # เพิ่มเส้น EMA 200
     df['EMA200'] = df['Close'].ewm(span=200, adjust=False).mean()
     return df
 
-# 1. ส่วนเปรียบเทียบ
+# 1. ส่วนเปรียบเทียบ (แบบพิมพ์ชื่อเอง)
 if tickers:
     st.subheader("กราฟเปรียบเทียบผลตอบแทน (%)")
-    df_multi = yf.download(tickers, period="1y", interval="1d", auto_adjust=True)['Close']
-    norm_df = (df_multi / df_multi.iloc[0] - 1) * 100
-    st.line_chart(norm_df)
+    try:
+        df_multi = yf.download(tickers, period="1y", interval="1d", auto_adjust=True)['Close']
+        if not df_multi.empty:
+            norm_df = (df_multi / df_multi.iloc[0] - 1) * 100
+            st.line_chart(norm_df)
+    except:
+        st.error("ตรวจสอบชื่อหุ้นอีกครั้ง (หุ้นไทยต้องมี .BK ต่อท้าย)")
 
 st.divider()
 
@@ -79,13 +86,13 @@ if ticker:
         
         if latest_rsi > 70:
             st.warning("**สถานะ: Overbought (ระวัง!)**")
-            st.write("สาเหตุ: RSI สูงกว่า 70 บ่งบอกว่ามีการไล่ซื้อมากเกินไป ราคาอาจเกิดการย่อตัวหรือพักฐานได้")
+            st.write("สาเหตุ: RSI สูงกว่า 70 บ่งบอกว่ามีการไล่ซื้อมากเกินไป ราคาอาจเกิดการย่อตัวได้")
         elif latest_rsi < 30:
             st.success("**สถานะ: Oversold (น่าสนใจ)**")
             if is_uptrend:
-                st.write("สาเหตุ: RSI ต่ำกว่า 30 ในขณะที่แนวโน้มหลักเป็นขาขึ้น นี่คือจังหวะย่อตัวในแนวโน้มขาขึ้น (Buy the dip)")
+                st.write("สาเหตุ: RSI ต่ำกว่า 30 ในแนวโน้มขาขึ้น นี่คือจังหวะ Buy the dip")
             else:
-                st.write("สาเหตุ: RSI ต่ำกว่า 30 แต่อยู่ในแนวโน้มขาลง อาจเป็นการเด้งสั้นๆ ควรระวังการรับมีด")
+                st.write("สาเหตุ: RSI ต่ำกว่า 30 แต่อยู่ในแนวโน้มขาลง ระวังการรับมีด")
         else:
             st.write(f"สถานะ: ปกติ (RSI อยู่ที่ {latest_rsi:.2f})")
             st.write("สาเหตุ: ราคายังแกว่งตัวอยู่ในระดับสมดุล ไม่ร้อนแรงจนเกินไป")
