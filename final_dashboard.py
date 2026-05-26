@@ -34,7 +34,7 @@ def get_stock_data(ticker, period):
         # === Indicators ===
         df['EMA200'] = df['Close'].ewm(span=200, adjust=False).mean()
         
-        # Bollinger Bands (20,2)
+        # Bollinger Bands
         df['BB_middle'] = df['Close'].rolling(window=20).mean()
         df['BB_std'] = df['Close'].rolling(window=20).std()
         df['BB_upper'] = df['BB_middle'] + (df['BB_std'] * 2)
@@ -49,11 +49,12 @@ def get_stock_data(ticker, period):
         rs = avg_gain / avg_loss
         df['RSI'] = 100 - (100 / (1 + rs))
         
-        # MACD
+        # MACD + Histogram
         exp12 = df['Close'].ewm(span=12, adjust=False).mean()
         exp26 = df['Close'].ewm(span=26, adjust=False).mean()
         df['MACD'] = exp12 - exp26
         df['Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
+        df['MACD_Hist'] = df['MACD'] - df['Signal']   # Histogram
         
         return df
     except Exception as e:
@@ -73,12 +74,8 @@ if ticker:
 
     # ====================== กราฟราคาหลัก + Bollinger Bands ======================
     fig_price = go.Figure()
-    
-    # ราคาปิด
     fig_price.add_trace(go.Scatter(x=df.index, y=df['Close'], 
                                  name='ราคาปิด', line=dict(color='#008080', width=2)))
-    
-    # Bollinger Bands
     fig_price.add_trace(go.Scatter(x=df.index, y=df['BB_upper'], 
                                  name='BB Upper', line=dict(color='rgba(255,0,0,0.3)', dash='dash')))
     fig_price.add_trace(go.Scatter(x=df.index, y=df['BB_lower'], 
@@ -86,8 +83,6 @@ if ticker:
                                  fill='tonexty', fillcolor='rgba(0,0,255,0.05)'))
     fig_price.add_trace(go.Scatter(x=df.index, y=df['BB_middle'], 
                                  name='BB Middle (SMA20)', line=dict(color='gray', dash='dot')))
-    
-    # EMA200
     fig_price.add_trace(go.Scatter(x=df.index, y=df['EMA200'], 
                                  name='EMA 200', line=dict(color='orange', width=2, dash='dot')))
     
@@ -100,23 +95,41 @@ if ticker:
     )
     st.plotly_chart(fig_price, use_container_width=True)
 
-    # ====================== Volume Chart ======================
+    # ====================== Volume ======================
     st.subheader("📊 ปริมาณการซื้อขาย (Volume)")
     fig_volume = go.Figure()
-    fig_volume.add_trace(go.Bar(x=df.index, y=df['Volume'], 
-                               name='Volume', 
-                               marker_color='#1E90FF'))
-    
-    fig_volume.update_layout(
-        template="plotly_white",
-        height=300,
-        hovermode="x unified"
-    )
+    fig_volume.add_trace(go.Bar(x=df.index, y=df['Volume'], name='Volume', marker_color='#1E90FF'))
+    fig_volume.update_layout(template="plotly_white", height=300, hovermode="x unified")
     st.plotly_chart(fig_volume, use_container_width=True)
 
-    # ====================== RSI + MACD ======================
-    col1, col2 = st.columns(2)
+    # ====================== MACD (อัพเดทใหม่) ======================
+    st.subheader("📈 MACD (Moving Average Convergence Divergence)")
     
+    fig_macd = make_subplots(rows=1, cols=1, shared_xaxes=True)
+    
+    # MACD Line
+    fig_macd.add_trace(go.Scatter(x=df.index, y=df['MACD'], 
+                                name='MACD Line', line=dict(color='blue')))
+    # Signal Line
+    fig_macd.add_trace(go.Scatter(x=df.index, y=df['Signal'], 
+                                name='Signal Line', line=dict(color='orange')))
+    # Histogram
+    fig_macd.add_trace(go.Bar(x=df.index, y=df['MACD_Hist'], 
+                            name='Histogram', 
+                            marker_color=['green' if x >= 0 else 'red' for x in df['MACD_Hist']]))
+    
+    fig_macd.update_layout(
+        template="plotly_white",
+        height=350,
+        hovermode="x unified",
+        legend=dict(x=0, y=1.02, xanchor="left", yanchor="bottom")
+    )
+    fig_macd.add_hline(y=0, line_dash="dash", line_color="gray")
+    
+    st.plotly_chart(fig_macd, use_container_width=True)
+
+    # ====================== RSI ======================
+    col1, col2 = st.columns(2)
     with col1:
         st.subheader("RSI (14)")
         fig_rsi = go.Figure()
@@ -125,14 +138,6 @@ if ticker:
         fig_rsi.add_hline(y=30, line_dash="dash", line_color="green")
         fig_rsi.update_layout(template="plotly_white", height=320)
         st.plotly_chart(fig_rsi, use_container_width=True)
-
-    with col2:
-        st.subheader("MACD")
-        fig_macd = go.Figure()
-        fig_macd.add_trace(go.Scatter(x=df.index, y=df['MACD'], name='MACD', line=dict(color='blue')))
-        fig_macd.add_trace(go.Scatter(x=df.index, y=df['Signal'], name='Signal', line=dict(color='orange')))
-        fig_macd.update_layout(template="plotly_white", height=320)
-        st.plotly_chart(fig_macd, use_container_width=True)
 
     # ====================== สรุปสถานะ ======================
     st.divider()
